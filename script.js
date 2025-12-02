@@ -13,7 +13,7 @@ async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!${RANGE}?key=${API_KEY}`;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${1rZJ7Tu-huQi_EVVSjjy7uhUumaxbM08WwsKjtjYJCn0}/values/${Website Issues}!${RANGE}?key=${AIzaSyDxSx1i7pEpjwAK4-LWuoS44crY0xi9HKo}`;
 
     try {
         const response = await fetch(url);
