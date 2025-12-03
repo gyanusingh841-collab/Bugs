@@ -7,12 +7,36 @@ let allData = [];
 let priorityChartInstance = null;
 let statusChartInstance = null;
 
-// --- FETCH DATA FROM GOOGLE SHEETS ---
+// Default Active Tab
+let activeTab = 'All';
+
+// --- TAB SELECTION LOGIC ---
+function setTab(tabName) {
+    activeTab = tabName;
+    
+    // UI Update: Highlight active card, Dim others
+    const tabs = ['All', 'Pending', 'Done', 'Other'];
+    
+    tabs.forEach(t => {
+        const el = document.getElementById('tab' + t);
+        if(t === activeTab) {
+            el.classList.remove('opacity-70');
+            el.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500');
+        } else {
+            el.classList.add('opacity-70');
+            el.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500');
+        }
+    });
+
+    // Re-apply filters with new tab selection
+    applyFilters();
+}
+
+// --- FETCH DATA ---
 async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    // URL Encoding for Sheet Name
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}?key=${API_KEY}`;
 
     try {
@@ -21,20 +45,18 @@ async function fetchSheetData() {
 
         if (json.error) {
             console.error("API Error:", json.error);
-            alert("Error: " + json.error.message + "\n\nTip: Check Sheet Name and Permissions.");
+            alert("Error: " + json.error.message);
             document.getElementById('lastUpdated').innerText = 'Error';
             return;
         }
 
         if (!json.values || json.values.length <= 1) {
             allData = [];
-            renderDashboard([]);
+            applyFilters();
             document.getElementById('lastUpdated').innerText = 'No Data Found';
             return;
         }
 
-        // --- MAPPING COLUMNS ---
-        // Skipping Row 1 (Headers)
         const dataRows = json.values.slice(1);
 
         allData = dataRows.map(row => ({
@@ -45,61 +67,114 @@ async function fetchSheetData() {
             assign: row[4] || "Unassigned",
             dev: row[5] || "",
             qa: row[6] || "",
-            status: (row[7] || "Other").trim(), // Column H
-            priority: (row[8] || "Low").trim(),  // Column I
+            status: (row[7] || "Other").trim(),
+            priority: (row[8] || "Low").trim(),
             date: row[9] || ""
         }))
-        // 1. Blank ID हटाना
         .filter(item => item.id.trim() !== "")
-        // 2. NEW CHANGE: Sort by ID Descending (Latest First)
-        // numeric: true ensures TW-10 comes before TW-2 correctly
+        // Sorting: Latest ID First
         .sort((a, b) => b.id.localeCompare(a.id, undefined, { numeric: true }));
 
-        renderDashboard(allData);
+        // Initial Filter Apply
+        applyFilters();
         document.getElementById('lastUpdated').innerText = 'Updated: ' + new Date().toLocaleTimeString();
 
     } catch (error) {
         console.error("Fetch failure:", error);
-        alert("Failed to connect. Check internet or API Key.");
+        alert("Failed to connect.");
     } finally {
         document.getElementById('loader').style.display = 'none';
     }
 }
 
-// --- RENDER DASHBOARD ---
-function renderDashboard(data) {
-    // 1. Calculate Summary Cards
+// --- FILTER LOGIC (UPDATED) ---
+function applyFilters() {
+    const search = document.getElementById('filterSearch').value.toLowerCase();
+    const module = document.getElementById('filterModule').value;
+    const priority = document.getElementById('filterPriority').value;
+    const dateFrom = document.getElementById('filterDateFrom').value;
+    const dateTo = document.getElementById('filterDateTo').value;
+
+    // STEP 1: Filter Base Data (Search/Module/Date) -> Used for Card Counts
+    const baseData = allData.filter(item => {
+        const inSearch = (item.id.toLowerCase().includes(search) || 
+                          item.desc.toLowerCase().includes(search) || 
+                          item.assign.toLowerCase().includes(search));
+        
+        const inModule = module === 'All' || item.module === module;
+
+        let itemP = item.priority.toLowerCase();
+        let filterP = priority.toLowerCase();
+        let inPriority = priority === 'All';
+        if (filterP === 'medium' && (itemP.includes('medium') || itemP.includes('midium'))) inPriority = true;
+        else if (filterP !== 'all' && itemP.includes(filterP)) inPriority = true;
+
+        let inDate = true;
+        if (dateFrom && item.date < dateFrom) inDate = false;
+        if (dateTo && item.date > dateTo) inDate = false;
+
+        return inSearch && inModule && inPriority && inDate;
+    });
+
+    // Update Card Counts based on the Base Filter (Tab selection shouldn't hide counts)
+    updateCardCounts(baseData);
+
+    // STEP 2: Apply Active Tab Filter -> Used for Table & Charts
+    const finalData = baseData.filter(item => {
+        if (activeTab === 'All') return true;
+        
+        const s = item.status.toLowerCase();
+        if (activeTab === 'Pending') return s === 'pending';
+        if (activeTab === 'Done') return s === 'done';
+        if (activeTab === 'Other') return s !== 'pending' && s !== 'done';
+        return true;
+    });
+
+    // Render Table & Charts
+    renderTableAndCharts(finalData);
+}
+
+// --- UPDATE SUMMARY CARDS ---
+function updateCardCounts(data) {
     const total = data.length;
-    
     const pending = data.filter(d => d.status.toLowerCase() === 'pending').length;
     const done = data.filter(d => d.status.toLowerCase() === 'done').length;
-    
     const other = data.filter(d => {
         const s = d.status.toLowerCase();
         return s !== 'pending' && s !== 'done';
     }).length;
 
-    // Update Cards
     document.getElementById('countTotal').innerText = total;
     document.getElementById('countPending').innerText = pending;
     document.getElementById('countDone').innerText = done;
     document.getElementById('countOther').innerText = other;
+}
 
-    // 2. Prepare Chart Data
+// --- RENDER TABLE & CHARTS ---
+function renderTableAndCharts(data) {
+    // 1. Prepare Chart Data
     const pCounts = { High: 0, Medium: 0, Low: 0 };
+    const sCounts = { done: 0, pending: 0, other: 0 };
+
     data.forEach(d => {
+        // Priority
         let p = d.priority.toLowerCase();
         if(p.includes('high')) p = 'High';
         else if(p.includes('low')) p = 'Low';
         else p = 'Medium';
-        
         if (pCounts[p] !== undefined) pCounts[p]++;
+
+        // Status
+        let s = d.status.toLowerCase();
+        if(s === 'done') sCounts.done++;
+        else if(s === 'pending') sCounts.pending++;
+        else sCounts.other++;
     });
 
-    // 3. Update Charts
-    updateCharts(pCounts, { pending, done, other });
+    // 2. Update Charts
+    updateCharts(pCounts, sCounts);
 
-    // 4. Render Table
+    // 3. Render Table
     const tbody = document.getElementById('tableBody');
     tbody.innerHTML = '';
 
@@ -176,38 +251,6 @@ function updateCharts(pData, sData) {
         },
         options: { responsive: true, maintainAspectRatio: false }
     });
-}
-
-// --- FILTER LOGIC ---
-function applyFilters() {
-    const search = document.getElementById('filterSearch').value.toLowerCase();
-    const module = document.getElementById('filterModule').value;
-    const priority = document.getElementById('filterPriority').value;
-    const dateFrom = document.getElementById('filterDateFrom').value;
-    const dateTo = document.getElementById('filterDateTo').value;
-
-    const filtered = allData.filter(item => {
-        const inSearch = (item.id.toLowerCase().includes(search) || 
-                          item.desc.toLowerCase().includes(search) || 
-                          item.assign.toLowerCase().includes(search));
-        
-        const inModule = module === 'All' || item.module === module;
-
-        let itemP = item.priority.toLowerCase();
-        let filterP = priority.toLowerCase();
-        let inPriority = priority === 'All';
-        
-        if (filterP === 'medium' && (itemP.includes('medium') || itemP.includes('midium'))) inPriority = true;
-        else if (filterP !== 'all' && itemP.includes(filterP)) inPriority = true;
-
-        let inDate = true;
-        if (dateFrom && item.date < dateFrom) inDate = false;
-        if (dateTo && item.date > dateTo) inDate = false;
-
-        return inSearch && inModule && inPriority && inDate;
-    });
-
-    renderDashboard(filtered);
 }
 
 // --- EVENTS ---
