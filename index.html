@@ -8,7 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="p-6">
@@ -25,19 +24,23 @@
     </header>
 
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div class="card bg-white p-6 rounded-lg shadow-sm border-l-4 border-blue-500 flex justify-between items-center">
+        
+        <div id="tabAll" onclick="setTab('All')" class="card cursor-pointer bg-white p-6 rounded-lg shadow-sm border-l-4 border-blue-500 flex justify-between items-center ring-2 ring-offset-2 ring-blue-500">
             <div><p class="text-gray-500 text-sm font-medium">Total Issues</p><h2 class="text-3xl font-bold text-gray-800" id="countTotal">-</h2></div>
             <div class="bg-blue-100 p-3 rounded-full text-blue-600"><i class="fas fa-list"></i></div>
         </div>
-        <div class="card bg-white p-6 rounded-lg shadow-sm border-l-4 border-yellow-500 flex justify-between items-center">
+
+        <div id="tabPending" onclick="setTab('Pending')" class="card cursor-pointer bg-white p-6 rounded-lg shadow-sm border-l-4 border-yellow-500 flex justify-between items-center opacity-70 hover:opacity-100">
             <div><p class="text-gray-500 text-sm font-medium">Pending</p><h2 class="text-3xl font-bold text-gray-800" id="countPending">-</h2></div>
             <div class="bg-yellow-100 p-3 rounded-full text-yellow-600"><i class="fas fa-clock"></i></div>
         </div>
-        <div class="card bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-500 flex justify-between items-center">
+
+        <div id="tabDone" onclick="setTab('Done')" class="card cursor-pointer bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-500 flex justify-between items-center opacity-70 hover:opacity-100">
             <div><p class="text-gray-500 text-sm font-medium">Done</p><h2 class="text-3xl font-bold text-gray-800" id="countDone">-</h2></div>
             <div class="bg-green-100 p-3 rounded-full text-green-600"><i class="fas fa-check-circle"></i></div>
         </div>
-        <div class="card bg-white p-6 rounded-lg shadow-sm border-l-4 border-gray-500 flex justify-between items-center">
+
+        <div id="tabOther" onclick="setTab('Other')" class="card cursor-pointer bg-white p-6 rounded-lg shadow-sm border-l-4 border-gray-500 flex justify-between items-center opacity-70 hover:opacity-100">
             <div><p class="text-gray-500 text-sm font-medium">Other</p><h2 class="text-3xl font-bold text-gray-800" id="countOther">-</h2></div>
             <div class="bg-gray-100 p-3 rounded-full text-gray-600"><i class="fas fa-question-circle"></i></div>
         </div>
@@ -117,7 +120,7 @@
             </table>
         </div>
         <div class="p-4 text-center text-gray-400 text-sm" id="noDataMessage" style="display: none;">
-            No records found. Check filters or connection.
+            No records found.
         </div>
     </div>
 
