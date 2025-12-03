@@ -1,7 +1,7 @@
 // --- CONFIGURATION ---
-const API_KEY = 'AIzaSyA5X1MEweP0WvQbJ2uqG1NQON_fFyPm-lY'; // New Key
+const API_KEY = 'AIzaSyA5X1MEweP0WvQbJ2uqG1NQON_fFyPm-lY'; 
 const SPREADSHEET_ID = '1rZJ7Tu-huQi_EVVSjjy7uhUumaxbM08WwsKjtjYJCn0'; 
-const SHEET_NAME = 'Website Issues'; // Corrected Name
+const SHEET_NAME = 'Website Issues'; 
 
 let allData = [];
 let priorityChartInstance = null;
@@ -12,7 +12,7 @@ async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    // Sheet Name encoding ensures special characters/spaces don't break the URL
+    // URL Encoding for Sheet Name
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}?key=${API_KEY}`;
 
     try {
@@ -33,7 +33,7 @@ async function fetchSheetData() {
             return;
         }
 
-        // --- MAPPING COLUMNS (Based on your list) ---
+        // --- MAPPING COLUMNS ---
         // Skipping Row 1 (Headers)
         const dataRows = json.values.slice(1);
 
@@ -45,11 +45,12 @@ async function fetchSheetData() {
             assign: row[4] || "Unassigned",
             dev: row[5] || "",
             qa: row[6] || "",
-            // Column H (Index 7) is Overall Status
-            status: (row[7] || "Other").trim(), 
-            priority: (row[8] || "Low").trim(),
+            status: (row[7] || "Other").trim(), // Column H
+            priority: (row[8] || "Low").trim(),  // Column I
             date: row[9] || ""
-        }));
+        }))
+        // --- NEW CHANGE: Filter out rows where ID is empty ---
+        .filter(item => item.id.trim() !== ""); 
 
         renderDashboard(allData);
         document.getElementById('lastUpdated').innerText = 'Updated: ' + new Date().toLocaleTimeString();
@@ -65,9 +66,8 @@ async function fetchSheetData() {
 // --- RENDER DASHBOARD ---
 function renderDashboard(data) {
     // 1. Calculate Summary Cards based on 'Overall Status'
-    const total = data.length;
+    const total = data.length; // अब यह सिर्फ Valid ID वाले मुद्दों को गिनेगा
     
-    // Normalize status to lowercase for comparison
     const pending = data.filter(d => d.status.toLowerCase() === 'pending').length;
     const done = data.filter(d => d.status.toLowerCase() === 'done').length;
     
@@ -109,15 +109,14 @@ function renderDashboard(data) {
             const tr = document.createElement('tr');
             tr.className = "bg-white border-b hover:bg-gray-50";
 
-            // Status Badge Logic
-            let sClass = 'bg-gray-100 text-gray-800'; // Default Gray for Other
+            // Status Badge
+            let sClass = 'bg-gray-100 text-gray-800'; 
             let sText = row.status.toLowerCase();
-            
             if(sText === 'done') sClass = 'bg-green-100 text-green-800';
             else if(sText === 'pending') sClass = 'bg-yellow-100 text-yellow-800';
-            else sClass = 'bg-blue-100 text-blue-800'; // Blue for Other/In Progress
+            else sClass = 'bg-blue-100 text-blue-800';
 
-            // Priority Badge Logic
+            // Priority Badge
             let pClass = 'bg-gray-100 text-gray-800';
             let pText = row.priority.toLowerCase();
             if(pText.includes('high')) pClass = 'bg-red-100 text-red-800';
@@ -169,7 +168,7 @@ function updateCharts(pData, sData) {
             labels: ['Done', 'Pending', 'Other'],
             datasets: [{
                 data: [sData.done, sData.pending, sData.other],
-                backgroundColor: ['#22c55e', '#eab308', '#3b82f6'], // Blue for Other
+                backgroundColor: ['#22c55e', '#eab308', '#3b82f6'], 
                 hoverOffset: 4
             }]
         },
