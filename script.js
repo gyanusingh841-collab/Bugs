@@ -1,12 +1,7 @@
 // --- CONFIGURATION ---
-// नई API Key जो आपने दी है
-const API_KEY = 'AIzaSyA5X1MEweP0WvQbJ2uqG1NQON_fFyPm-lY'; 
-
-// Sheet ID वही है जो आपने दी
+const API_KEY = 'AIzaSyA5X1MEweP0WvQbJ2uqG1NQON_fFyPm-lY'; // New Key
 const SPREADSHEET_ID = '1rZJ7Tu-huQi_EVVSjjy7uhUumaxbM08WwsKjtjYJCn0'; 
-
-// ध्यान दें: स्पेलिंग 'Website Issues' (plural) कर दी है
-const SHEET_NAME = 'Website Issues'; 
+const SHEET_NAME = 'Website Issues'; // Corrected Name
 
 let allData = [];
 let priorityChartInstance = null;
@@ -17,37 +12,29 @@ async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    // encodeURIComponent का उपयोग किया है ताकि शीट के नाम में Space होने पर Error न आए
+    // Sheet Name encoding ensures special characters/spaces don't break the URL
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}?key=${API_KEY}`;
 
     try {
         const response = await fetch(url);
         const json = await response.json();
 
-        // Error Handling: अगर API Key या Sheet Name गलत हो
         if (json.error) {
             console.error("API Error:", json.error);
-            let msg = "Error fetching data.";
-            if(json.error.status === "PERMISSION_DENIED") msg = "Check API Key or Sheet Permissions.";
-            if(json.error.status === "NOT_FOUND") msg = "Check Sheet ID or Sheet Name (Spelling mismatch).";
-            if(json.error.status === "INVALID_ARGUMENT") msg = "Check Sheet Name (Tabs) in Google Sheet.";
-            
-            alert("Error: " + msg + "\n\nDetails: " + json.error.message);
+            alert("Error: " + json.error.message + "\n\nTip: Check Sheet Name and Permissions.");
             document.getElementById('lastUpdated').innerText = 'Error';
             return;
         }
 
-        // Check agar data khali hai
         if (!json.values || json.values.length <= 1) {
             allData = [];
             renderDashboard([]);
             document.getElementById('lastUpdated').innerText = 'No Data Found';
-            console.warn("Sheet connected but empty or only headers found.");
             return;
         }
 
-        // --- MAPPING COLUMNS ---
-        // Row 1 (Headers) को हटा रहे हैं
+        // --- MAPPING COLUMNS (Based on your list) ---
+        // Skipping Row 1 (Headers)
         const dataRows = json.values.slice(1);
 
         allData = dataRows.map(row => ({
@@ -58,7 +45,8 @@ async function fetchSheetData() {
             assign: row[4] || "Unassigned",
             dev: row[5] || "",
             qa: row[6] || "",
-            status: (row[7] || "Pending").trim(),
+            // Column H (Index 7) is Overall Status
+            status: (row[7] || "Other").trim(), 
             priority: (row[8] || "Low").trim(),
             date: row[9] || ""
         }));
@@ -68,7 +56,7 @@ async function fetchSheetData() {
 
     } catch (error) {
         console.error("Fetch failure:", error);
-        alert("Failed to connect. Check internet or API Key restrictions.");
+        alert("Failed to connect. Check internet or API Key.");
     } finally {
         document.getElementById('loader').style.display = 'none';
     }
@@ -76,12 +64,20 @@ async function fetchSheetData() {
 
 // --- RENDER DASHBOARD ---
 function renderDashboard(data) {
-    // 1. Calculate Summary Cards
+    // 1. Calculate Summary Cards based on 'Overall Status'
     const total = data.length;
+    
+    // Normalize status to lowercase for comparison
     const pending = data.filter(d => d.status.toLowerCase() === 'pending').length;
     const done = data.filter(d => d.status.toLowerCase() === 'done').length;
-    const other = total - (pending + done);
+    
+    // Other = Anything that is NOT 'pending' and NOT 'done'
+    const other = data.filter(d => {
+        const s = d.status.toLowerCase();
+        return s !== 'pending' && s !== 'done';
+    }).length;
 
+    // Update Cards
     document.getElementById('countTotal').innerText = total;
     document.getElementById('countPending').innerText = pending;
     document.getElementById('countDone').innerText = done;
@@ -90,14 +86,10 @@ function renderDashboard(data) {
     // 2. Prepare Chart Data
     const pCounts = { High: 0, Medium: 0, Low: 0 };
     data.forEach(d => {
-        let p = (d.priority || 'Low').trim();
-        // Normalize Text (Capitalize first letter)
-        p = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
-        
-        // Handling variations/typos
-        if(p.includes('High')) p = 'High';
-        else if(p.includes('Low')) p = 'Low';
-        else p = 'Medium'; // Default to Medium if unknown
+        let p = d.priority.toLowerCase();
+        if(p.includes('high')) p = 'High';
+        else if(p.includes('low')) p = 'Low';
+        else p = 'Medium';
         
         if (pCounts[p] !== undefined) pCounts[p]++;
     });
@@ -117,17 +109,20 @@ function renderDashboard(data) {
             const tr = document.createElement('tr');
             tr.className = "bg-white border-b hover:bg-gray-50";
 
-            // Colors
+            // Status Badge Logic
+            let sClass = 'bg-gray-100 text-gray-800'; // Default Gray for Other
+            let sText = row.status.toLowerCase();
+            
+            if(sText === 'done') sClass = 'bg-green-100 text-green-800';
+            else if(sText === 'pending') sClass = 'bg-yellow-100 text-yellow-800';
+            else sClass = 'bg-blue-100 text-blue-800'; // Blue for Other/In Progress
+
+            // Priority Badge Logic
             let pClass = 'bg-gray-100 text-gray-800';
             let pText = row.priority.toLowerCase();
             if(pText.includes('high')) pClass = 'bg-red-100 text-red-800';
             else if(pText.includes('low')) pClass = 'bg-green-100 text-green-800';
             else pClass = 'bg-yellow-100 text-yellow-800';
-            
-            let sClass = 'bg-gray-100 text-gray-800';
-            let sText = row.status.toLowerCase();
-            if(sText === 'done') sClass = 'bg-green-100 text-green-800';
-            else if(sText === 'pending') sClass = 'bg-yellow-100 text-yellow-800';
 
             tr.innerHTML = `
                 <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">${row.id}</td>
@@ -159,7 +154,7 @@ function updateCharts(pData, sData) {
         data: {
             labels: ['High', 'Medium', 'Low'],
             datasets: [{
-                label: 'Count',
+                label: 'Priority',
                 data: [pData.High, pData.Medium, pData.Low],
                 backgroundColor: ['#ef4444', '#eab308', '#22c55e'],
                 borderWidth: 1
@@ -174,7 +169,7 @@ function updateCharts(pData, sData) {
             labels: ['Done', 'Pending', 'Other'],
             datasets: [{
                 data: [sData.done, sData.pending, sData.other],
-                backgroundColor: ['#22c55e', '#eab308', '#6b7280'],
+                backgroundColor: ['#22c55e', '#eab308', '#3b82f6'], // Blue for Other
                 hoverOffset: 4
             }]
         },
