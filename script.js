@@ -49,8 +49,11 @@ async function fetchSheetData() {
             priority: (row[8] || "Low").trim(),  // Column I
             date: row[9] || ""
         }))
-        // --- NEW CHANGE: Filter out rows where ID is empty ---
-        .filter(item => item.id.trim() !== ""); 
+        // 1. Blank ID हटाना
+        .filter(item => item.id.trim() !== "")
+        // 2. NEW CHANGE: Sort by ID Descending (Latest First)
+        // numeric: true ensures TW-10 comes before TW-2 correctly
+        .sort((a, b) => b.id.localeCompare(a.id, undefined, { numeric: true }));
 
         renderDashboard(allData);
         document.getElementById('lastUpdated').innerText = 'Updated: ' + new Date().toLocaleTimeString();
@@ -65,13 +68,12 @@ async function fetchSheetData() {
 
 // --- RENDER DASHBOARD ---
 function renderDashboard(data) {
-    // 1. Calculate Summary Cards based on 'Overall Status'
-    const total = data.length; // अब यह सिर्फ Valid ID वाले मुद्दों को गिनेगा
+    // 1. Calculate Summary Cards
+    const total = data.length;
     
     const pending = data.filter(d => d.status.toLowerCase() === 'pending').length;
     const done = data.filter(d => d.status.toLowerCase() === 'done').length;
     
-    // Other = Anything that is NOT 'pending' and NOT 'done'
     const other = data.filter(d => {
         const s = d.status.toLowerCase();
         return s !== 'pending' && s !== 'done';
