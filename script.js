@@ -1,8 +1,9 @@
 // --- CONFIGURATION ---
 const API_KEY = 'AIzaSyDxSx1i7pEpjwAK4-LWuoS44crY0xi9HKo'; 
 const SPREADSHEET_ID = '1rZJ7Tu-huQi_EVVSjjy7uhUumaxbM08WwsKjtjYJCn0'; 
-const SHEET_NAME = 'Website Issues';
-const RANGE = 'A2:J'; 
+const SHEET_NAME = 'Website Issue';
+
+// Note: Maine 'RANGE' hata diya hai. Ab ye puri sheet read karega.
 
 let allData = [];
 let priorityChartInstance = null;
@@ -13,7 +14,8 @@ async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${1rZJ7Tu-huQi_EVVSjjy7uhUumaxbM08WwsKjtjYJCn0}/values/${Website Issues}!${RANGE}?key=${AIzaSyDxSx1i7pEpjwAK4-LWuoS44crY0xi9HKo}`;
+    // URL me ab sirf SHEET_NAME hai, range nahi. Isse pura data aayega.
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}?key=${API_KEY}`;
 
     try {
         const response = await fetch(url);
@@ -26,14 +28,19 @@ async function fetchSheetData() {
             return;
         }
 
-        if (!json.values || json.values.length === 0) {
+        // Check agar data khali hai ya sirf header hai
+        if (!json.values || json.values.length <= 1) {
             allData = [];
             renderDashboard([]);
+            document.getElementById('lastUpdated').innerText = 'No Data Found';
             return;
         }
 
         // --- MAPPING COLUMNS ---
-        allData = json.values.map(row => ({
+        // json.values.slice(1) ka use kiya hai taaki Row 1 (Headers) skip ho jaye.
+        const dataRows = json.values.slice(1);
+
+        allData = dataRows.map(row => ({
             id: row[0] || "",
             module: row[1] || "Other",
             desc: row[2] || "",
@@ -74,6 +81,8 @@ function renderDashboard(data) {
     const pCounts = { High: 0, Medium: 0, Low: 0 };
     data.forEach(d => {
         let p = d.priority.charAt(0).toUpperCase() + d.priority.slice(1).toLowerCase();
+        
+        // Handling variations like 'midium' or spaces
         if(p.includes('High')) p = 'High';
         else if(p.includes('Low')) p = 'Low';
         else p = 'Medium';
