@@ -4,7 +4,7 @@ const SPREADSHEET_ID = '1rZJ7Tu-huQi_EVVSjjy7uhUumaxbM08WwsKjtjYJCn0';
 const SHEET_NAME = 'Website Issues'; 
 
 let allData = [];
-let currentFilteredData = []; // Data after filters applied
+let currentFilteredData = [];
 let priorityChartInstance = null;
 let statusChartInstance = null;
 let activeTab = 'All';
@@ -30,7 +30,7 @@ function setTab(tabName) {
     applyFilters();
 }
 
-// --- HELPER: RENDER MEDIA (LIGHTWEIGHT CHIP STYLE) ---
+// --- HELPER: RENDER MEDIA (UPDATED VIDEO STYLE) ---
 function renderMediaContent(url, text) {
     if (!url) {
         if (text && (text.startsWith('http') || text.startsWith('www'))) url = text;
@@ -45,15 +45,21 @@ function renderMediaContent(url, text) {
         let icon = 'fa-google-drive';
         let colorClass = 'bg-gray-100 text-gray-700 border-gray-300';
         
-        // Smart Icon Logic (Based on text/keywords)
+        // Smart Icon Logic
         const lowerText = cleanText.toLowerCase();
+        
+        // 1. VIDEO HANDLING (Changed to Purple style like Snapshot)
         if (lowerText.includes('video') || lowerText.includes('.mp4') || lowerText.includes('.mov')) {
-            icon = 'fa-file-video text-red-500';
-            colorClass = 'bg-red-50 text-red-700 border-red-200';
-        } else if (lowerText.includes('image') || lowerText.includes('img') || lowerText.includes('screenshot') || lowerText.includes('.png') || lowerText.includes('.jpg')) {
+            icon = 'fa-file-video text-purple-500'; // Same Purple
+            colorClass = 'bg-purple-50 text-purple-700 border-purple-200'; // Same Purple
+        } 
+        // 2. IMAGE HANDLING
+        else if (lowerText.includes('image') || lowerText.includes('img') || lowerText.includes('screenshot') || lowerText.includes('snapshot') || lowerText.includes('.png') || lowerText.includes('.jpg')) {
             icon = 'fa-file-image text-purple-500';
             colorClass = 'bg-purple-50 text-purple-700 border-purple-200';
-        } else if (lowerText.includes('sheet') || lowerText.includes('xls')) {
+        } 
+        // 3. EXCEL/SHEET
+        else if (lowerText.includes('sheet') || lowerText.includes('xls')) {
             icon = 'fa-file-excel text-green-600';
             colorClass = 'bg-green-50 text-green-700 border-green-200';
         }
@@ -76,7 +82,6 @@ async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    // Using standard fields to avoid errors and keep it fast
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?includeGridData=true&ranges=${encodeURIComponent(SHEET_NAME)}&fields=sheets(data(rowData(values(hyperlink,formattedValue,userEnteredValue))))&key=${API_KEY}`;
 
     try {
@@ -152,6 +157,9 @@ async function fetchSheetData() {
         .filter(item => item.id.trim() !== "")
         .sort((a, b) => b.id.localeCompare(a.id, undefined, { numeric: true }));
 
+        // POPULATE ASSIGN DROPDOWN
+        populateAssignFilter(allData);
+
         applyFilters();
         document.getElementById('lastUpdated').innerText = 'Updated: ' + new Date().toLocaleTimeString();
 
@@ -163,10 +171,30 @@ async function fetchSheetData() {
     }
 }
 
+// --- POPULATE ASSIGN FILTER ---
+function populateAssignFilter(data) {
+    const select = document.getElementById('filterAssign');
+    // Get unique assignees, exclude empty/unassigned if preferred, sort alphabetically
+    const assignees = [...new Set(data.map(item => item.assign))].sort();
+    
+    // Clear existing options except first
+    select.innerHTML = '<option value="All">All Assignees</option>';
+    
+    assignees.forEach(assignee => {
+        if(assignee) {
+            const option = document.createElement('option');
+            option.value = assignee;
+            option.innerText = assignee;
+            select.appendChild(option);
+        }
+    });
+}
+
 // --- FILTER LOGIC ---
 function applyFilters() {
     const search = document.getElementById('filterSearch').value.toLowerCase();
     const module = document.getElementById('filterModule').value;
+    const assign = document.getElementById('filterAssign').value; // New Filter
     const priority = document.getElementById('filterPriority').value;
     const dateFrom = document.getElementById('filterDateFrom').value;
     const dateTo = document.getElementById('filterDateTo').value;
@@ -176,20 +204,23 @@ function applyFilters() {
         const inSearch = (item.id.toLowerCase().includes(search) || 
                           item.desc.toLowerCase().includes(search) || 
                           item.assign.toLowerCase().includes(search));
+        
         const inModule = module === 'All' || item.module === module;
+        const inAssign = assign === 'All' || item.assign === assign; // New Logic
+        
         let itemP = item.priority.toLowerCase();
         let filterP = priority.toLowerCase();
         let inPriority = priority === 'All';
         if (filterP === 'medium' && (itemP.includes('medium') || itemP.includes('midium'))) inPriority = true;
         else if (filterP !== 'all' && itemP.includes(filterP)) inPriority = true;
+        
         let inDate = true;
         if (dateFrom && item.date < dateFrom) inDate = false;
         if (dateTo && item.date > dateTo) inDate = false;
 
-        return inSearch && inModule && inPriority && inDate;
+        return inSearch && inModule && inAssign && inPriority && inDate;
     });
 
-    // Update Counts (Always based on base filters, ignoring tabs)
     updateCardCounts(baseData);
 
     // 2. Tab Filter
@@ -204,11 +235,11 @@ function applyFilters() {
 
     // 3. Update Global Data & Reset Page
     currentFilteredData = finalData;
-    currentPage = 1; // Reset to page 1 on filter change
+    currentPage = 1;
     
     // Render
-    updateCharts(baseData); // Charts use base data (optional: can use finalData if preferred)
-    renderTablePage(); // Call Pagination Renderer
+    updateCharts(baseData); 
+    renderTablePage();
 }
 
 // --- PAGINATION RENDERER ---
@@ -217,20 +248,16 @@ function renderTablePage() {
     const startIndex = (currentPage - 1) * rowsPerPage;
     const endIndex = Math.min(startIndex + rowsPerPage, totalRows);
     
-    // Slice Data for current page
     const pageData = currentFilteredData.slice(startIndex, endIndex);
 
-    // Update Info Text
     document.getElementById('startRow').innerText = totalRows === 0 ? 0 : startIndex + 1;
     document.getElementById('endRow').innerText = endIndex;
     document.getElementById('totalRows').innerText = totalRows;
     document.getElementById('pageIndicator').innerText = `Page ${currentPage}`;
 
-    // Update Buttons
     document.getElementById('btnPrev').disabled = currentPage === 1;
     document.getElementById('btnNext').disabled = endIndex >= totalRows;
 
-    // Render Table Rows
     const tbody = document.getElementById('tableBody');
     tbody.innerHTML = '';
 
@@ -309,7 +336,6 @@ function updateCardCounts(data) {
 
 // --- CHARTS ---
 function updateCharts(data) {
-    // Prep Data
     const pCounts = { High: 0, Medium: 0, Low: 0 };
     const sCounts = { done: 0, pending: 0, other: 0 };
 
@@ -364,14 +390,13 @@ function updateCharts(data) {
 document.addEventListener('DOMContentLoaded', () => {
     fetchSheetData();
     
-    // Pagination Listeners
     document.getElementById('rowsPerPage').addEventListener('change', changeRowsPerPage);
     document.getElementById('btnPrev').addEventListener('click', prevPage);
     document.getElementById('btnNext').addEventListener('click', nextPage);
 
-    // Filter Listeners
     document.getElementById('filterSearch').addEventListener('input', applyFilters);
     document.getElementById('filterModule').addEventListener('change', applyFilters);
+    document.getElementById('filterAssign').addEventListener('change', applyFilters); // New Listener
     document.getElementById('filterPriority').addEventListener('change', applyFilters);
     document.getElementById('filterDateFrom').addEventListener('change', applyFilters);
     document.getElementById('filterDateTo').addEventListener('change', applyFilters);
