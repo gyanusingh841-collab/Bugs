@@ -48,14 +48,16 @@
             <div class="relative h-64"><canvas id="priorityChart"></canvas></div>
         </div>
         <div class="bg-white p-6 rounded-lg shadow-sm">
-            <h3 class="text-lg font-semibold text-gray-700 mb-4">Issues by Status</h3>
-            <div class="relative h-64"><canvas id="statusChart"></canvas></div>
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Issues by Assignee</h3>
+            <div class="relative h-64"><canvas id="assignChart"></canvas></div>
         </div>
     </div>
 
     <div class="bg-white p-6 rounded-lg shadow-sm mb-6">
         <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-filter mr-2"></i>Filters</h3>
-        <div class="grid grid-cols-1 md:grid-cols-6 gap-4"> <div class="md:col-span-1">
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            
+            <div class="md:col-span-1">
                 <label class="block text-sm text-gray-600 mb-1">Search</label>
                 <input type="text" id="filterSearch" placeholder="Search ID, Desc..." class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-sm">
             </div>
@@ -72,9 +74,9 @@
             </div>
 
             <div>
-                <label class="block text-sm text-gray-600 mb-1">Assign To</label>
-                <select id="filterAssign" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white text-sm">
-                    <option value="All">All Assignees</option>
+                <label class="block text-sm text-gray-600 mb-1">Reported By</label>
+                <select id="filterReported" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white text-sm">
+                    <option value="All">All Reporters</option>
                     </select>
             </div>
 
@@ -116,7 +118,7 @@
                         <th class="px-4 py-3">Reference</th>
                         <th class="px-4 py-3">Priority</th>
                         <th class="px-4 py-3">Assign To</th>
-                        <th class="px-4 py-3">Dev Comment</th>
+                        <th class="px-4 py-3 text-blue-700">Reported By</th> <th class="px-4 py-3">Dev Comment</th>
                         <th class="px-4 py-3">QA Comment</th>
                         <th class="px-4 py-3">Status</th>
                         <th class="px-4 py-3">Date</th>
