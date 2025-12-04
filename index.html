@@ -55,14 +55,14 @@
 
     <div class="bg-white p-6 rounded-lg shadow-sm mb-6">
         <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-filter mr-2"></i>Filters</h3>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div class="md:col-span-1">
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-4"> <div class="md:col-span-1">
                 <label class="block text-sm text-gray-600 mb-1">Search</label>
-                <input type="text" id="filterSearch" placeholder="Search ID, Desc, Assignee..." class="w-full p-2 border rounded focus:outline-none focus:border-blue-500">
+                <input type="text" id="filterSearch" placeholder="Search ID, Desc..." class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-sm">
             </div>
+
             <div>
                 <label class="block text-sm text-gray-600 mb-1">Module</label>
-                <select id="filterModule" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white">
+                <select id="filterModule" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white text-sm">
                     <option value="All">All Modules</option>
                     <option value="Admin">Admin</option>
                     <option value="Employer">Employer</option>
@@ -70,22 +70,32 @@
                     <option value="Other">Other</option>
                 </select>
             </div>
+
+            <div>
+                <label class="block text-sm text-gray-600 mb-1">Assign To</label>
+                <select id="filterAssign" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white text-sm">
+                    <option value="All">All Assignees</option>
+                    </select>
+            </div>
+
             <div>
                 <label class="block text-sm text-gray-600 mb-1">Priority</label>
-                <select id="filterPriority" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white">
+                <select id="filterPriority" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white text-sm">
                     <option value="All">All Priorities</option>
                     <option value="High">High</option>
                     <option value="Medium">Medium</option>
                     <option value="Low">Low</option>
                 </select>
             </div>
+
             <div>
                 <label class="block text-sm text-gray-600 mb-1">From Date</label>
-                <input type="date" id="filterDateFrom" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500">
+                <input type="date" id="filterDateFrom" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-sm">
             </div>
+
             <div>
                 <label class="block text-sm text-gray-600 mb-1">To Date</label>
-                <input type="date" id="filterDateTo" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500">
+                <input type="date" id="filterDateTo" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-sm">
             </div>
         </div>
     </div>
