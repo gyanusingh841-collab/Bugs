@@ -14,9 +14,8 @@ let activeTab = 'All';
 function setTab(tabName) {
     activeTab = tabName;
     
-    // UI Update: Highlight active card, Dim others
+    // UI Update: Highlight active card
     const tabs = ['All', 'Pending', 'Done', 'Other'];
-    
     tabs.forEach(t => {
         const el = document.getElementById('tab' + t);
         if(t === activeTab) {
@@ -28,11 +27,11 @@ function setTab(tabName) {
         }
     });
 
-    // Re-apply filters with new tab selection
+    // Re-apply filters
     applyFilters();
 }
 
-// --- FETCH DATA ---
+// --- FETCH DATA FROM GOOGLE SHEETS ---
 async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
@@ -57,37 +56,61 @@ async function fetchSheetData() {
             return;
         }
 
+        // --- SMART COLUMN DETECTION (Dynamic Mapping) ---
+        // Row 1 (Headers) को पढ़कर सही Index पता करेंगे
+        const headers = json.values[0].map(h => h.toLowerCase());
+        
+        // Helper to find column index by name keyword
+        const getIdx = (keywords, defaultIdx) => {
+            const idx = headers.findIndex(h => keywords.some(k => h.includes(k)));
+            return idx > -1 ? idx : defaultIdx;
+        };
+
+        // Mapping Indices dynamically (अगर हेडर नाम मैच न हो तो डिफ़ॉल्ट इंडेक्स यूज़ होगा)
+        const IDX_ID = getIdx(['id', 'issue'], 0);
+        const IDX_MODULE = getIdx(['module'], 1);
+        const IDX_DESC = getIdx(['description', 'desc'], 2);
+        const IDX_REF = getIdx(['reference', 'ref'], 3);
+        const IDX_ASSIGN = getIdx(['assign'], 4);
+        const IDX_DEV = getIdx(['dev'], 5);
+        const IDX_QA = getIdx(['qa', 'quality'], 6);
+        const IDX_STATUS = getIdx(['status', 'overall'], 7); // यह "Status" या "Overall" को ढूंढेगा
+        const IDX_PRIORITY = getIdx(['priority'], 8);
+        const IDX_DATE = getIdx(['date'], 9);
+
+        console.log("Detected Columns:", { Status: IDX_STATUS, QA: IDX_QA, Priority: IDX_PRIORITY });
+
+        // --- MAPPING DATA ROWS ---
         const dataRows = json.values.slice(1);
 
         allData = dataRows.map(row => ({
-            id: row[0] || "",
-            module: row[1] || "Other",
-            desc: row[2] || "",
-            ref: row[3] || "",
-            assign: row[4] || "Unassigned",
-            dev: row[5] || "",
-            qa: row[6] || "",
-            status: (row[7] || "Other").trim(),
-            priority: (row[8] || "Low").trim(),
-            date: row[9] || ""
+            id: row[IDX_ID] || "",
+            module: row[IDX_MODULE] || "Other",
+            desc: row[IDX_DESC] || "",
+            ref: row[IDX_REF] || "",
+            assign: row[IDX_ASSIGN] || "Unassigned",
+            dev: row[IDX_DEV] || "",
+            qa: row[IDX_QA] || "",
+            status: (row[IDX_STATUS] || "Other").trim(), // अब यह सही कॉलम से आएगा
+            priority: (row[IDX_PRIORITY] || "Low").trim(),
+            date: row[IDX_DATE] || ""
         }))
         .filter(item => item.id.trim() !== "")
-        // Sorting: Latest ID First
+        // Sort: Latest ID First
         .sort((a, b) => b.id.localeCompare(a.id, undefined, { numeric: true }));
 
-        // Initial Filter Apply
         applyFilters();
         document.getElementById('lastUpdated').innerText = 'Updated: ' + new Date().toLocaleTimeString();
 
     } catch (error) {
         console.error("Fetch failure:", error);
-        alert("Failed to connect.");
+        alert("Failed to connect. Check internet or API Key.");
     } finally {
         document.getElementById('loader').style.display = 'none';
     }
 }
 
-// --- FILTER LOGIC (UPDATED) ---
+// --- FILTER LOGIC ---
 function applyFilters() {
     const search = document.getElementById('filterSearch').value.toLowerCase();
     const module = document.getElementById('filterModule').value;
@@ -95,7 +118,7 @@ function applyFilters() {
     const dateFrom = document.getElementById('filterDateFrom').value;
     const dateTo = document.getElementById('filterDateTo').value;
 
-    // STEP 1: Filter Base Data (Search/Module/Date) -> Used for Card Counts
+    // 1. Base Filter (For Counts)
     const baseData = allData.filter(item => {
         const inSearch = (item.id.toLowerCase().includes(search) || 
                           item.desc.toLowerCase().includes(search) || 
@@ -116,10 +139,9 @@ function applyFilters() {
         return inSearch && inModule && inPriority && inDate;
     });
 
-    // Update Card Counts based on the Base Filter (Tab selection shouldn't hide counts)
     updateCardCounts(baseData);
 
-    // STEP 2: Apply Active Tab Filter -> Used for Table & Charts
+    // 2. Tab Filter (For Table/Charts)
     const finalData = baseData.filter(item => {
         if (activeTab === 'All') return true;
         
@@ -130,7 +152,6 @@ function applyFilters() {
         return true;
     });
 
-    // Render Table & Charts
     renderTableAndCharts(finalData);
 }
 
@@ -152,7 +173,7 @@ function updateCardCounts(data) {
 
 // --- RENDER TABLE & CHARTS ---
 function renderTableAndCharts(data) {
-    // 1. Prepare Chart Data
+    // Chart Data Prep
     const pCounts = { High: 0, Medium: 0, Low: 0 };
     const sCounts = { done: 0, pending: 0, other: 0 };
 
@@ -171,10 +192,9 @@ function renderTableAndCharts(data) {
         else sCounts.other++;
     });
 
-    // 2. Update Charts
     updateCharts(pCounts, sCounts);
 
-    // 3. Render Table
+    // Table Render
     const tbody = document.getElementById('tableBody');
     tbody.innerHTML = '';
 
@@ -186,14 +206,14 @@ function renderTableAndCharts(data) {
             const tr = document.createElement('tr');
             tr.className = "bg-white border-b hover:bg-gray-50";
 
-            // Status Badge
+            // Status Badge Colors
             let sClass = 'bg-gray-100 text-gray-800'; 
             let sText = row.status.toLowerCase();
             if(sText === 'done') sClass = 'bg-green-100 text-green-800';
             else if(sText === 'pending') sClass = 'bg-yellow-100 text-yellow-800';
             else sClass = 'bg-blue-100 text-blue-800';
 
-            // Priority Badge
+            // Priority Badge Colors
             let pClass = 'bg-gray-100 text-gray-800';
             let pText = row.priority.toLowerCase();
             if(pText.includes('high')) pClass = 'bg-red-100 text-red-800';
@@ -217,7 +237,7 @@ function renderTableAndCharts(data) {
     }
 }
 
-// --- CHART CONFIG ---
+// --- CHARTS CONFIG ---
 function updateCharts(pData, sData) {
     const ctxP = document.getElementById('priorityChart').getContext('2d');
     const ctxS = document.getElementById('statusChart').getContext('2d');
@@ -256,7 +276,6 @@ function updateCharts(pData, sData) {
 // --- EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
     fetchSheetData();
-
     document.getElementById('filterSearch').addEventListener('input', applyFilters);
     document.getElementById('filterModule').addEventListener('change', applyFilters);
     document.getElementById('filterPriority').addEventListener('change', applyFilters);
