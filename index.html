@@ -24,22 +24,18 @@
     </header>
 
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        
         <div id="tabAll" onclick="setTab('All')" class="card cursor-pointer bg-white p-6 rounded-lg shadow-sm border-l-4 border-blue-500 flex justify-between items-center ring-2 ring-offset-2 ring-blue-500">
             <div><p class="text-gray-500 text-sm font-medium">Total Issues</p><h2 class="text-3xl font-bold text-gray-800" id="countTotal">-</h2></div>
             <div class="bg-blue-100 p-3 rounded-full text-blue-600"><i class="fas fa-list"></i></div>
         </div>
-
         <div id="tabPending" onclick="setTab('Pending')" class="card cursor-pointer bg-white p-6 rounded-lg shadow-sm border-l-4 border-yellow-500 flex justify-between items-center opacity-70 hover:opacity-100">
             <div><p class="text-gray-500 text-sm font-medium">Pending</p><h2 class="text-3xl font-bold text-gray-800" id="countPending">-</h2></div>
             <div class="bg-yellow-100 p-3 rounded-full text-yellow-600"><i class="fas fa-clock"></i></div>
         </div>
-
         <div id="tabDone" onclick="setTab('Done')" class="card cursor-pointer bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-500 flex justify-between items-center opacity-70 hover:opacity-100">
             <div><p class="text-gray-500 text-sm font-medium">Done</p><h2 class="text-3xl font-bold text-gray-800" id="countDone">-</h2></div>
             <div class="bg-green-100 p-3 rounded-full text-green-600"><i class="fas fa-check-circle"></i></div>
         </div>
-
         <div id="tabOther" onclick="setTab('Other')" class="card cursor-pointer bg-white p-6 rounded-lg shadow-sm border-l-4 border-gray-500 flex justify-between items-center opacity-70 hover:opacity-100">
             <div><p class="text-gray-500 text-sm font-medium">Other</p><h2 class="text-3xl font-bold text-gray-800" id="countOther">-</h2></div>
             <div class="bg-gray-100 p-3 rounded-full text-gray-600"><i class="fas fa-question-circle"></i></div>
@@ -94,12 +90,13 @@
         </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+    <div class="bg-white rounded-lg shadow-sm overflow-hidden mb-10">
         <div class="p-4 border-b flex justify-between">
             <h3 class="text-lg font-semibold text-gray-700">Detailed Issue List</h3>
             <div class="loader" id="loader"></div>
         </div>
-        <div class="overflow-x-auto">
+        
+        <div class="overflow-x-auto min-h-[300px]">
             <table class="w-full text-sm text-left text-gray-500">
                 <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                     <tr>
@@ -119,6 +116,30 @@
                     </tbody>
             </table>
         </div>
+        
+        <div class="p-4 border-t flex flex-col md:flex-row justify-between items-center bg-gray-50 gap-4" id="paginationControls">
+            <div class="text-sm text-gray-600">
+                Showing <span id="startRow" class="font-medium">0</span> to <span id="endRow" class="font-medium">0</span> of <span id="totalRows" class="font-medium">0</span> entries
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-gray-600">Rows:</span>
+                    <select id="rowsPerPage" class="border rounded p-1 text-sm bg-white focus:outline-none focus:border-blue-500 cursor-pointer">
+                        <option value="10">10</option>
+                        <option value="30">30</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+                <div class="flex gap-1">
+                    <button id="btnPrev" class="px-3 py-1 border rounded bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm">Prev</button>
+                    <span id="pageIndicator" class="px-3 py-1 text-sm font-medium text-gray-700">Page 1</span>
+                    <button id="btnNext" class="px-3 py-1 border rounded bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm">Next</button>
+                </div>
+            </div>
+        </div>
+
         <div class="p-4 text-center text-gray-400 text-sm" id="noDataMessage" style="display: none;">
             No records found.
         </div>
