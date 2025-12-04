@@ -31,12 +31,14 @@ function setTab(tabName) {
     applyFilters();
 }
 
-// --- FETCH DATA FROM GOOGLE SHEETS ---
+// --- FETCH DATA FROM GOOGLE SHEETS (ADVANCED) ---
 async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}?key=${API_KEY}`;
+    // NEW URL: Using 'includeGridData=true' to fetch Hyperlinks and Formatted Values
+    // fields parameter limits the response size to just what we need (values, hyperlinks)
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?includeGridData=true&ranges=${encodeURIComponent(SHEET_NAME)}&fields=sheets(data(rowData(values(hyperlink,formattedValue))))&key=${API_KEY}`;
 
     try {
         const response = await fetch(url);
@@ -49,24 +51,27 @@ async function fetchSheetData() {
             return;
         }
 
-        if (!json.values || json.values.length <= 1) {
+        // Deep parsing for the nested JSON structure of 'spreadsheets.get'
+        const sheetData = json.sheets?.[0]?.data?.[0]?.rowData;
+
+        if (!sheetData || sheetData.length <= 1) {
             allData = [];
             applyFilters();
             document.getElementById('lastUpdated').innerText = 'No Data Found';
             return;
         }
 
-        // --- SMART COLUMN DETECTION (Dynamic Mapping) ---
-        // Row 1 (Headers) को पढ़कर सही Index पता करेंगे
-        const headers = json.values[0].map(h => h.toLowerCase());
+        // --- SMART COLUMN DETECTION ---
+        // Headers are in the first row's values
+        const headerRow = sheetData[0].values || [];
+        const headers = headerRow.map(cell => (cell.formattedValue || '').toLowerCase());
         
-        // Helper to find column index by name keyword
+        // Helper to find column index
         const getIdx = (keywords, defaultIdx) => {
             const idx = headers.findIndex(h => keywords.some(k => h.includes(k)));
             return idx > -1 ? idx : defaultIdx;
         };
 
-        // Mapping Indices dynamically (अगर हेडर नाम मैच न हो तो डिफ़ॉल्ट इंडेक्स यूज़ होगा)
         const IDX_ID = getIdx(['id', 'issue'], 0);
         const IDX_MODULE = getIdx(['module'], 1);
         const IDX_DESC = getIdx(['description', 'desc'], 2);
@@ -74,27 +79,34 @@ async function fetchSheetData() {
         const IDX_ASSIGN = getIdx(['assign'], 4);
         const IDX_DEV = getIdx(['dev'], 5);
         const IDX_QA = getIdx(['qa', 'quality'], 6);
-        const IDX_STATUS = getIdx(['status', 'overall'], 7); // यह "Status" या "Overall" को ढूंढेगा
+        const IDX_STATUS = getIdx(['status', 'overall'], 7);
         const IDX_PRIORITY = getIdx(['priority'], 8);
         const IDX_DATE = getIdx(['date'], 9);
 
-        console.log("Detected Columns:", { Status: IDX_STATUS, QA: IDX_QA, Priority: IDX_PRIORITY });
-
         // --- MAPPING DATA ROWS ---
-        const dataRows = json.values.slice(1);
+        const dataRows = sheetData.slice(1);
 
-        allData = dataRows.map(row => ({
-            id: row[IDX_ID] || "",
-            module: row[IDX_MODULE] || "Other",
-            desc: row[IDX_DESC] || "",
-            ref: row[IDX_REF] || "",
-            assign: row[IDX_ASSIGN] || "Unassigned",
-            dev: row[IDX_DEV] || "",
-            qa: row[IDX_QA] || "",
-            status: (row[IDX_STATUS] || "Other").trim(), // अब यह सही कॉलम से आएगा
-            priority: (row[IDX_PRIORITY] || "Low").trim(),
-            date: row[IDX_DATE] || ""
-        }))
+        allData = dataRows.map(row => {
+            const cells = row.values || [];
+            
+            // Safe helper to get value and link
+            const getVal = (idx) => cells[idx]?.formattedValue || "";
+            const getLink = (idx) => cells[idx]?.hyperlink || "";
+
+            return {
+                id: getVal(IDX_ID),
+                module: getVal(IDX_MODULE) || "Other",
+                desc: getVal(IDX_DESC),
+                ref: getVal(IDX_REF),      // The text (e.g. "Error.png")
+                refUrl: getLink(IDX_REF),  // The hidden URL (e.g. "https://drive...")
+                assign: getVal(IDX_ASSIGN) || "Unassigned",
+                dev: getVal(IDX_DEV),
+                qa: getVal(IDX_QA),
+                status: (getVal(IDX_STATUS) || "Other").trim(),
+                priority: (getVal(IDX_PRIORITY) || "Low").trim(),
+                date: getVal(IDX_DATE)
+            };
+        })
         .filter(item => item.id.trim() !== "")
         // Sort: Latest ID First
         .sort((a, b) => b.id.localeCompare(a.id, undefined, { numeric: true }));
@@ -178,14 +190,12 @@ function renderTableAndCharts(data) {
     const sCounts = { done: 0, pending: 0, other: 0 };
 
     data.forEach(d => {
-        // Priority
         let p = d.priority.toLowerCase();
         if(p.includes('high')) p = 'High';
         else if(p.includes('low')) p = 'Low';
         else p = 'Medium';
         if (pCounts[p] !== undefined) pCounts[p]++;
 
-        // Status
         let s = d.status.toLowerCase();
         if(s === 'done') sCounts.done++;
         else if(s === 'pending') sCounts.pending++;
@@ -206,25 +216,34 @@ function renderTableAndCharts(data) {
             const tr = document.createElement('tr');
             tr.className = "bg-white border-b hover:bg-gray-50";
 
-            // Status Badge Colors
+            // Status Badge
             let sClass = 'bg-gray-100 text-gray-800'; 
             let sText = row.status.toLowerCase();
             if(sText === 'done') sClass = 'bg-green-100 text-green-800';
             else if(sText === 'pending') sClass = 'bg-yellow-100 text-yellow-800';
             else sClass = 'bg-blue-100 text-blue-800';
 
-            // Priority Badge Colors
+            // Priority Badge
             let pClass = 'bg-gray-100 text-gray-800';
             let pText = row.priority.toLowerCase();
             if(pText.includes('high')) pClass = 'bg-red-100 text-red-800';
             else if(pText.includes('low')) pClass = 'bg-green-100 text-green-800';
             else pClass = 'bg-yellow-100 text-yellow-800';
 
+            // --- REFERENCE LINK LOGIC ---
+            // If URL exists, make it a link. Else just text.
+            let refContent = row.ref;
+            if(row.refUrl) {
+                refContent = `<a href="${row.refUrl}" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1">
+                                <i class="fas fa-external-link-alt text-xs"></i> ${row.ref}
+                              </a>`;
+            }
+
             tr.innerHTML = `
                 <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">${row.id}</td>
                 <td class="px-4 py-3">${row.module}</td>
                 <td class="px-4 py-3 truncate max-w-xs" title="${row.desc}">${row.desc}</td>
-                <td class="px-4 py-3">${row.ref}</td>
+                <td class="px-4 py-3">${refContent}</td>
                 <td class="px-4 py-3"><span class="${pClass} text-xs font-medium px-2 py-0.5 rounded">${row.priority}</span></td>
                 <td class="px-4 py-3">${row.assign}</td>
                 <td class="px-4 py-3 text-xs italic text-gray-500">${row.dev}</td>
