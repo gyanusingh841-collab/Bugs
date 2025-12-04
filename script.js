@@ -28,60 +28,79 @@ function setTab(tabName) {
 // --- HELPER: DETECT & RENDER MEDIA ---
 function renderMediaContent(url, text) {
     if (!url) {
-        // अगर URL खाली है, लेकिन टेक्स्ट ही URL जैसा है
-        if (text && (text.startsWith('http') || text.startsWith('www'))) {
-            url = text;
-        } else {
-            return text; 
-        }
+        if (text && (text.startsWith('http') || text.startsWith('www'))) url = text;
+        else return text || "-"; 
     }
     
     const cleanUrl = url.trim();
     const cleanText = text || "View File";
-    const ext = cleanUrl.split('.').pop().toLowerCase().split('?')[0];
-
-    // 1. IMAGE HANDLING (jpg, png, gif, webp, jpeg)
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-        return `<div class="group relative">
-                    <img src="${cleanUrl}" class="h-12 w-12 object-cover rounded border border-gray-200 cursor-pointer hover:scale-150 transition-transform" 
-                         onclick="window.open('${cleanUrl}', '_blank')" alt="Image">
-                    <span class="text-[10px] text-gray-500 truncate w-20 block">${cleanText}</span>
-                </div>`;
+    
+    // --- EXTRACT DRIVE FILE ID ---
+    let driveId = null;
+    // Regex to match /d/FILE_ID or id=FILE_ID
+    const driveRegex = /\/d\/([a-zA-Z0-9_-]+)|id=([a-zA-Z0-9_-]+)/;
+    const match = cleanUrl.match(driveRegex);
+    if (match) {
+        driveId = match[1] || match[2];
     }
 
-    // 2. VIDEO HANDLING (mp4, webm)
-    if (['mp4', 'webm', 'ogg'].includes(ext)) {
-        return `<video src="${cleanUrl}" class="h-16 w-24 rounded shadow cursor-pointer" controls preload="metadata"></video>`;
+    // A. GOOGLE DRIVE VIDEO & IMAGE HANDLING
+    if (driveId) {
+        // We assume it's a video/image if the user put it there. 
+        // Best approach: Show a Thumbnail/Icon that opens a Lightbox or new Tab, 
+        // OR Embed if it's explicitly a video.
+        
+        // Since we don't know exact mimeType without Drive API, we use a smart embed approach.
+        // Google Drive Preview Link (Works for both Video and Image)
+        const embedUrl = `https://drive.google.com/file/d/${driveId}/preview`;
+        
+        // If text specifically says "video" or extension is mp4/mov
+        const isVideo = cleanText.toLowerCase().includes('video') || cleanText.match(/\.(mp4|mov|mkv)$/i);
+        const isImage = cleanText.toLowerCase().includes('image') || cleanText.match(/\.(jpg|png|jpeg)$/i);
+
+        if (isVideo) {
+            // Show Video Player
+            return `<div class="w-32 h-20 rounded overflow-hidden border shadow-sm relative group">
+                        <iframe src="${embedUrl}" class="w-full h-full" allow="autoplay"></iframe>
+                        <a href="${cleanUrl}" target="_blank" class="absolute top-0 right-0 bg-black/50 text-white p-1 text-xs hover:bg-black"><i class="fas fa-expand"></i></a>
+                    </div>`;
+        }
+        
+        if (isImage) {
+            // Direct Image View
+            const imgUrl = `https://drive.google.com/uc?export=view&id=${driveId}`;
+            return `<div class="group relative w-16 h-16">
+                        <img src="${imgUrl}" class="w-full h-full object-cover rounded border shadow-sm cursor-pointer hover:scale-110 transition-transform" 
+                             onclick="window.open('${cleanUrl}', '_blank')" 
+                             onerror="this.src='https://cdn-icons-png.flaticon.com/512/2965/2965358.png'">
+                    </div>`;
+        }
+
+        // Default Drive Chip (If we don't know it's video/image)
+        return `<a href="${cleanUrl}" target="_blank" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 border border-blue-200 transition-colors">
+                    <i class="fab fa-google-drive"></i> 
+                    <span class="truncate max-w-[80px]">${cleanText}</span>
+                </a>`;
     }
 
-    // 3. YOUTUBE EMBED
+    // B. DIRECT IMAGE LINKS (Non-Drive)
+    if (cleanUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
+        return `<img src="${cleanUrl}" class="w-12 h-12 object-cover rounded border hover:scale-150 transition-transform cursor-pointer" onclick="window.open('${cleanUrl}', '_blank')">`;
+    }
+
+    // C. YOUTUBE
     if (cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be')) {
         let videoId = '';
         if (cleanUrl.includes('v=')) videoId = cleanUrl.split('v=')[1].split('&')[0];
         else if (cleanUrl.includes('youtu.be/')) videoId = cleanUrl.split('youtu.be/')[1];
-        
         if (videoId) {
             return `<iframe class="w-24 h-16 rounded" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
         }
     }
 
-    // 4. GOOGLE DRIVE / SMART CHIPS (Styling as a Chip Button)
-    if (cleanUrl.includes('drive.google.com') || cleanUrl.includes('docs.google.com')) {
-        // Icon based on type guess
-        let icon = 'fa-google-drive';
-        if(cleanUrl.includes('spreadsheets')) icon = 'fa-file-excel text-green-600';
-        else if(cleanUrl.includes('document')) icon = 'fa-file-word text-blue-600';
-        else if(cleanUrl.includes('folder')) icon = 'fa-folder text-yellow-600';
-        
-        return `<a href="${cleanUrl}" target="_blank" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-xs font-medium hover:bg-blue-50 hover:text-blue-600 border border-gray-300 transition-colors shadow-sm" title="${cleanUrl}">
-                    <i class="fab ${icon}"></i> 
-                    <span class="truncate max-w-[100px]">${cleanText}</span>
-                </a>`;
-    }
-
-    // 5. DEFAULT LINK (Fallback)
+    // D. FALLBACK LINK
     return `<a href="${cleanUrl}" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1 text-xs">
-                <i class="fas fa-link"></i> ${cleanText.substring(0, 15)}${cleanText.length > 15 ? '...' : ''}
+                <i class="fas fa-link"></i> ${cleanText.substring(0, 15)}...
             </a>`;
 }
 
@@ -90,8 +109,8 @@ async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    // API Call fetching hyperlinks
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?includeGridData=true&ranges=${encodeURIComponent(SHEET_NAME)}&fields=sheets(data(rowData(values(hyperlink,formattedValue,userEnteredValue))))&key=${API_KEY}`;
+    // IMPORTANT: added 'smartChip' to fields to fix the Chip Issue
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?includeGridData=true&ranges=${encodeURIComponent(SHEET_NAME)}&fields=sheets(data(rowData(values(hyperlink,formattedValue,userEnteredValue,smartChip))))&key=${API_KEY}`;
 
     try {
         const response = await fetch(url);
@@ -124,7 +143,7 @@ async function fetchSheetData() {
         const IDX_ID = getIdx(['id', 'issue'], 0);
         const IDX_MODULE = getIdx(['module'], 1);
         const IDX_DESC = getIdx(['description', 'desc'], 2);
-        const IDX_REF = getIdx(['reference', 'ref'], 3);
+        const IDX_REF = getIdx(['reference', 'ref'], 3); // The Media Column
         const IDX_ASSIGN = getIdx(['assign'], 4);
         const IDX_DEV = getIdx(['dev'], 5);
         const IDX_QA = getIdx(['qa', 'quality'], 6);
@@ -137,26 +156,49 @@ async function fetchSheetData() {
         allData = dataRows.map(row => {
             const cells = row.values || [];
             const getVal = (idx) => cells[idx]?.formattedValue || "";
-            // Robust Link Extraction: Check hyperlink -> then formula -> then text
+            
+            // --- ROBUST LINK EXTRACTION (FIX FOR CHIPS) ---
             const getLink = (idx) => {
-                if (cells[idx]?.hyperlink) return cells[idx].hyperlink;
-                // Sometimes smart chips store url in userEnteredValue formula
-                const formula = cells[idx]?.userEnteredValue?.formulaValue;
+                const cell = cells[idx];
+                if (!cell) return "";
+                
+                // 1. Direct Hyperlink (Standard)
+                if (cell.hyperlink) return cell.hyperlink;
+                
+                // 2. Smart Chip (Drive File) - THE FIX
+                // Google Sheets API returns file ID in 'smartChip.extraction.entityId' or similar
+                // We assume if it's a chip, we construct a generic View URL
+                if (cell.smartChip) {
+                     // Sometimes ID is deeper, but let's try to extract from text if ID is missing in simple view
+                     // But if 'metadata' exists:
+                     if(cell.smartChip.metadata && cell.smartChip.metadata.id) {
+                         return `https://drive.google.com/file/d/${cell.smartChip.metadata.id}/view`;
+                     }
+                     // Fallback: If text format looks like a file but is a chip
+                }
+
+                // 3. Formula (HYPERLINK function)
+                const formula = cell.userEnteredValue?.formulaValue;
                 if (formula && formula.includes('HYPERLINK("')) {
                     return formula.split('"')[1]; 
                 }
-                // Fallback: If text is URL
-                const txt = cells[idx]?.formattedValue || "";
+                
+                // 4. Text Fallback (if user just pasted URL)
+                const txt = cell.formattedValue || "";
                 if(txt.startsWith('http')) return txt;
+                
                 return "";
             };
+
+            // Get Reference URL using the new logic
+            const rawRefUrl = getLink(IDX_REF);
 
             return {
                 id: getVal(IDX_ID),
                 module: getVal(IDX_MODULE) || "Other",
                 desc: getVal(IDX_DESC),
                 ref: getVal(IDX_REF),      
-                refUrl: getLink(IDX_REF),  // Smart extraction
+                refUrl: rawRefUrl,
                 assign: getVal(IDX_ASSIGN) || "Unassigned",
                 dev: getVal(IDX_DEV),
                 qa: getVal(IDX_QA),
@@ -237,7 +279,7 @@ function updateCardCounts(data) {
     document.getElementById('countOther').innerText = other;
 }
 
-// --- RENDER TABLE & CHARTS ---
+// --- RENDER TABLE ---
 function renderTableAndCharts(data) {
     const pCounts = { High: 0, Medium: 0, Low: 0 };
     const sCounts = { done: 0, pending: 0, other: 0 };
@@ -274,7 +316,7 @@ function renderTableAndCharts(data) {
             let pClass = row.priority.toLowerCase().includes('high') ? 'bg-red-100 text-red-800' : 
                          row.priority.toLowerCase().includes('low') ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
 
-            // --- USE MEDIA RENDERER ---
+            // --- RENDER MEDIA (Chip Fix + Video/Image) ---
             const refContent = renderMediaContent(row.refUrl, row.ref);
 
             tr.innerHTML = `
