@@ -6,7 +6,7 @@ const SHEET_NAME = 'Website Issues';
 let allData = [];
 let currentFilteredData = [];
 let priorityChartInstance = null;
-let statusChartInstance = null;
+let assignChartInstance = null; // Renamed from statusChart
 let activeTab = 'All';
 
 // PAGINATION STATE
@@ -30,13 +30,12 @@ function setTab(tabName) {
     applyFilters();
 }
 
-// --- HELPER: RENDER MEDIA (UPDATED VIDEO STYLE) ---
+// --- HELPER: RENDER MEDIA ---
 function renderMediaContent(url, text) {
     if (!url) {
         if (text && (text.startsWith('http') || text.startsWith('www'))) url = text;
         else return text || "-"; 
     }
-    
     const cleanUrl = url.trim();
     const cleanText = text || "View File";
     
@@ -45,33 +44,25 @@ function renderMediaContent(url, text) {
         let icon = 'fa-google-drive';
         let colorClass = 'bg-gray-100 text-gray-700 border-gray-300';
         
-        // Smart Icon Logic
         const lowerText = cleanText.toLowerCase();
         
-        // 1. VIDEO HANDLING (Changed to Purple style like Snapshot)
-        if (lowerText.includes('video') || lowerText.includes('.mp4') || lowerText.includes('.mov')) {
-            icon = 'fa-file-video text-purple-500'; // Same Purple
-            colorClass = 'bg-purple-50 text-purple-700 border-purple-200'; // Same Purple
-        } 
-        // 2. IMAGE HANDLING
-        else if (lowerText.includes('image') || lowerText.includes('img') || lowerText.includes('screenshot') || lowerText.includes('snapshot') || lowerText.includes('.png') || lowerText.includes('.jpg')) {
-            icon = 'fa-file-image text-purple-500';
+        // VIDEO / IMAGE (Purple Style)
+        if (lowerText.includes('video') || lowerText.includes('.mp4') || lowerText.includes('.mov') ||
+            lowerText.includes('image') || lowerText.includes('img') || lowerText.includes('screenshot') || lowerText.includes('snapshot') || lowerText.includes('.png') || lowerText.includes('.jpg')) {
+            icon = lowerText.includes('video') ? 'fa-file-video text-purple-500' : 'fa-file-image text-purple-500';
             colorClass = 'bg-purple-50 text-purple-700 border-purple-200';
         } 
-        // 3. EXCEL/SHEET
         else if (lowerText.includes('sheet') || lowerText.includes('xls')) {
             icon = 'fa-file-excel text-green-600';
             colorClass = 'bg-green-50 text-green-700 border-green-200';
         }
 
-        // Return a clean clickable Chip
         return `<a href="${cleanUrl}" target="_blank" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium hover:shadow-md transition-all ${colorClass}" title="${cleanText}">
                     <i class="fab ${icon}"></i> 
                     <span class="truncate max-w-[100px]">${cleanText}</span>
                 </a>`;
     }
 
-    // Standard Link
     return `<a href="${cleanUrl}" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1 text-xs">
                 <i class="fas fa-link"></i> ${cleanText.substring(0, 15)}...
             </a>`;
@@ -122,6 +113,8 @@ async function fetchSheetData() {
         const IDX_STATUS = getIdx(['status', 'overall'], 7);
         const IDX_PRIORITY = getIdx(['priority'], 8);
         const IDX_DATE = getIdx(['date'], 9);
+        // NEW: Detect Reported By Column
+        const IDX_REPORTED = getIdx(['report', 'raised', 'founder'], 10); // Defaulting to col 10 if not found
 
         // Map Data
         const dataRows = sheetData.slice(1);
@@ -147,6 +140,7 @@ async function fetchSheetData() {
                 ref: getVal(IDX_REF),      
                 refUrl: getLink(IDX_REF),
                 assign: getVal(IDX_ASSIGN) || "Unassigned",
+                reported: getVal(IDX_REPORTED) || "-", // New Data Field
                 dev: getVal(IDX_DEV),
                 qa: getVal(IDX_QA),
                 status: (getVal(IDX_STATUS) || "Other").trim(),
@@ -157,8 +151,8 @@ async function fetchSheetData() {
         .filter(item => item.id.trim() !== "")
         .sort((a, b) => b.id.localeCompare(a.id, undefined, { numeric: true }));
 
-        // POPULATE ASSIGN DROPDOWN
-        populateAssignFilter(allData);
+        // POPULATE REPORTED BY DROPDOWN
+        populateReportedFilter(allData);
 
         applyFilters();
         document.getElementById('lastUpdated').innerText = 'Updated: ' + new Date().toLocaleTimeString();
@@ -171,20 +165,18 @@ async function fetchSheetData() {
     }
 }
 
-// --- POPULATE ASSIGN FILTER ---
-function populateAssignFilter(data) {
-    const select = document.getElementById('filterAssign');
-    // Get unique assignees, exclude empty/unassigned if preferred, sort alphabetically
-    const assignees = [...new Set(data.map(item => item.assign))].sort();
+// --- POPULATE REPORTED FILTER ---
+function populateReportedFilter(data) {
+    const select = document.getElementById('filterReported');
+    const reporters = [...new Set(data.map(item => item.reported))].sort();
     
-    // Clear existing options except first
-    select.innerHTML = '<option value="All">All Assignees</option>';
+    select.innerHTML = '<option value="All">All Reporters</option>';
     
-    assignees.forEach(assignee => {
-        if(assignee) {
+    reporters.forEach(rep => {
+        if(rep && rep !== '-') {
             const option = document.createElement('option');
-            option.value = assignee;
-            option.innerText = assignee;
+            option.value = rep;
+            option.innerText = rep;
             select.appendChild(option);
         }
     });
@@ -194,7 +186,7 @@ function populateAssignFilter(data) {
 function applyFilters() {
     const search = document.getElementById('filterSearch').value.toLowerCase();
     const module = document.getElementById('filterModule').value;
-    const assign = document.getElementById('filterAssign').value; // New Filter
+    const reported = document.getElementById('filterReported').value; // Changed from Assign
     const priority = document.getElementById('filterPriority').value;
     const dateFrom = document.getElementById('filterDateFrom').value;
     const dateTo = document.getElementById('filterDateTo').value;
@@ -206,7 +198,7 @@ function applyFilters() {
                           item.assign.toLowerCase().includes(search));
         
         const inModule = module === 'All' || item.module === module;
-        const inAssign = assign === 'All' || item.assign === assign; // New Logic
+        const inReported = reported === 'All' || item.reported === reported; // Filter by Reported
         
         let itemP = item.priority.toLowerCase();
         let filterP = priority.toLowerCase();
@@ -218,7 +210,7 @@ function applyFilters() {
         if (dateFrom && item.date < dateFrom) inDate = false;
         if (dateTo && item.date > dateTo) inDate = false;
 
-        return inSearch && inModule && inAssign && inPriority && inDate;
+        return inSearch && inModule && inReported && inPriority && inDate;
     });
 
     updateCardCounts(baseData);
@@ -233,11 +225,9 @@ function applyFilters() {
         return true;
     });
 
-    // 3. Update Global Data & Reset Page
     currentFilteredData = finalData;
     currentPage = 1;
     
-    // Render
     updateCharts(baseData); 
     renderTablePage();
 }
@@ -286,8 +276,8 @@ function renderTablePage() {
                 <td class="px-4 py-3 truncate max-w-xs" title="${row.desc}">${row.desc}</td>
                 <td class="px-4 py-3">${refContent}</td>
                 <td class="px-4 py-3"><span class="${pClass} text-xs font-medium px-2 py-0.5 rounded">${row.priority}</span></td>
-                <td class="px-4 py-3">${row.assign}</td>
-                <td class="px-4 py-3 text-xs italic text-gray-500">${row.dev}</td>
+                <td class="px-4 py-3 font-medium">${row.assign}</td>
+                <td class="px-4 py-3 text-blue-700 font-medium">${row.reported}</td> <td class="px-4 py-3 text-xs italic text-gray-500">${row.dev}</td>
                 <td class="px-4 py-3 text-xs italic text-gray-500">${row.qa}</td>
                 <td class="px-4 py-3"><span class="${sClass} text-xs font-medium px-2 py-0.5 rounded">${row.status}</span></td>
                 <td class="px-4 py-3 text-xs whitespace-nowrap">${row.date}</td>
@@ -334,30 +324,32 @@ function updateCardCounts(data) {
     document.getElementById('countOther').innerText = other;
 }
 
-// --- CHARTS ---
+// --- CHARTS (UPDATED: Added Assignee Chart) ---
 function updateCharts(data) {
     const pCounts = { High: 0, Medium: 0, Low: 0 };
-    const sCounts = { done: 0, pending: 0, other: 0 };
+    const assignCounts = {}; // Store Assignee Data
 
     data.forEach(d => {
+        // Priority Stats
         let p = d.priority.toLowerCase();
         if(p.includes('high')) p = 'High';
         else if(p.includes('low')) p = 'Low';
         else p = 'Medium';
         if (pCounts[p] !== undefined) pCounts[p]++;
 
-        let s = d.status.toLowerCase();
-        if(s === 'done') sCounts.done++;
-        else if(s === 'pending') sCounts.pending++;
-        else sCounts.other++;
+        // Assignee Stats (Cleaning name)
+        let assignee = d.assign || "Unassigned";
+        if (assignee.trim() === "") assignee = "Unassigned";
+        assignCounts[assignee] = (assignCounts[assignee] || 0) + 1;
     });
 
     const ctxP = document.getElementById('priorityChart').getContext('2d');
-    const ctxS = document.getElementById('statusChart').getContext('2d');
+    const ctxA = document.getElementById('assignChart').getContext('2d');
 
     if (priorityChartInstance) priorityChartInstance.destroy();
-    if (statusChartInstance) statusChartInstance.destroy();
+    if (assignChartInstance) assignChartInstance.destroy();
 
+    // 1. Priority Chart
     priorityChartInstance = new Chart(ctxP, {
         type: 'bar',
         data: {
@@ -372,17 +364,31 @@ function updateCharts(data) {
         options: { responsive: true, maintainAspectRatio: false }
     });
 
-    statusChartInstance = new Chart(ctxS, {
-        type: 'doughnut',
+    // 2. Assignee Chart (New)
+    const assignLabels = Object.keys(assignCounts);
+    const assignData = Object.values(assignCounts);
+    
+    // Generate random colors for bars
+    const bgColors = assignLabels.map(() => `hsl(${Math.random() * 360}, 70%, 50%)`);
+
+    assignChartInstance = new Chart(ctxA, {
+        type: 'bar', // Using Bar chart for better visibility of names
         data: {
-            labels: ['Done', 'Pending', 'Other'],
+            labels: assignLabels,
             datasets: [{
-                data: [sCounts.done, sCounts.pending, sCounts.other],
-                backgroundColor: ['#22c55e', '#eab308', '#3b82f6'], 
-                hoverOffset: 4
+                label: 'Issues Assigned',
+                data: assignData,
+                backgroundColor: bgColors,
+                borderWidth: 1
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false }
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
     });
 }
 
@@ -396,8 +402,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('filterSearch').addEventListener('input', applyFilters);
     document.getElementById('filterModule').addEventListener('change', applyFilters);
-    document.getElementById('filterAssign').addEventListener('change', applyFilters); // New Listener
+    document.getElementById('filterReported').addEventListener('change', applyFilters); // Changed from Assign
     document.getElementById('filterPriority').addEventListener('change', applyFilters);
     document.getElementById('filterDateFrom').addEventListener('change', applyFilters);
     document.getElementById('filterDateTo').addEventListener('change', applyFilters);
 });
+        
