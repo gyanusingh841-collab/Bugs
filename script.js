@@ -6,15 +6,11 @@ const SHEET_NAME = 'Website Issues';
 let allData = [];
 let priorityChartInstance = null;
 let statusChartInstance = null;
-
-// Default Active Tab
 let activeTab = 'All';
 
 // --- TAB SELECTION LOGIC ---
 function setTab(tabName) {
     activeTab = tabName;
-    
-    // UI Update: Highlight active card
     const tabs = ['All', 'Pending', 'Done', 'Other'];
     tabs.forEach(t => {
         const el = document.getElementById('tab' + t);
@@ -26,19 +22,76 @@ function setTab(tabName) {
             el.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500');
         }
     });
-
-    // Re-apply filters
     applyFilters();
 }
 
-// --- FETCH DATA FROM GOOGLE SHEETS (ADVANCED) ---
+// --- HELPER: DETECT & RENDER MEDIA ---
+function renderMediaContent(url, text) {
+    if (!url) {
+        // अगर URL खाली है, लेकिन टेक्स्ट ही URL जैसा है
+        if (text && (text.startsWith('http') || text.startsWith('www'))) {
+            url = text;
+        } else {
+            return text; 
+        }
+    }
+    
+    const cleanUrl = url.trim();
+    const cleanText = text || "View File";
+    const ext = cleanUrl.split('.').pop().toLowerCase().split('?')[0];
+
+    // 1. IMAGE HANDLING (jpg, png, gif, webp, jpeg)
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+        return `<div class="group relative">
+                    <img src="${cleanUrl}" class="h-12 w-12 object-cover rounded border border-gray-200 cursor-pointer hover:scale-150 transition-transform" 
+                         onclick="window.open('${cleanUrl}', '_blank')" alt="Image">
+                    <span class="text-[10px] text-gray-500 truncate w-20 block">${cleanText}</span>
+                </div>`;
+    }
+
+    // 2. VIDEO HANDLING (mp4, webm)
+    if (['mp4', 'webm', 'ogg'].includes(ext)) {
+        return `<video src="${cleanUrl}" class="h-16 w-24 rounded shadow cursor-pointer" controls preload="metadata"></video>`;
+    }
+
+    // 3. YOUTUBE EMBED
+    if (cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be')) {
+        let videoId = '';
+        if (cleanUrl.includes('v=')) videoId = cleanUrl.split('v=')[1].split('&')[0];
+        else if (cleanUrl.includes('youtu.be/')) videoId = cleanUrl.split('youtu.be/')[1];
+        
+        if (videoId) {
+            return `<iframe class="w-24 h-16 rounded" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+        }
+    }
+
+    // 4. GOOGLE DRIVE / SMART CHIPS (Styling as a Chip Button)
+    if (cleanUrl.includes('drive.google.com') || cleanUrl.includes('docs.google.com')) {
+        // Icon based on type guess
+        let icon = 'fa-google-drive';
+        if(cleanUrl.includes('spreadsheets')) icon = 'fa-file-excel text-green-600';
+        else if(cleanUrl.includes('document')) icon = 'fa-file-word text-blue-600';
+        else if(cleanUrl.includes('folder')) icon = 'fa-folder text-yellow-600';
+        
+        return `<a href="${cleanUrl}" target="_blank" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-xs font-medium hover:bg-blue-50 hover:text-blue-600 border border-gray-300 transition-colors shadow-sm" title="${cleanUrl}">
+                    <i class="fab ${icon}"></i> 
+                    <span class="truncate max-w-[100px]">${cleanText}</span>
+                </a>`;
+    }
+
+    // 5. DEFAULT LINK (Fallback)
+    return `<a href="${cleanUrl}" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1 text-xs">
+                <i class="fas fa-link"></i> ${cleanText.substring(0, 15)}${cleanText.length > 15 ? '...' : ''}
+            </a>`;
+}
+
+// --- FETCH DATA ---
 async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    // NEW URL: Using 'includeGridData=true' to fetch Hyperlinks and Formatted Values
-    // fields parameter limits the response size to just what we need (values, hyperlinks)
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?includeGridData=true&ranges=${encodeURIComponent(SHEET_NAME)}&fields=sheets(data(rowData(values(hyperlink,formattedValue))))&key=${API_KEY}`;
+    // API Call fetching hyperlinks
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?includeGridData=true&ranges=${encodeURIComponent(SHEET_NAME)}&fields=sheets(data(rowData(values(hyperlink,formattedValue,userEnteredValue))))&key=${API_KEY}`;
 
     try {
         const response = await fetch(url);
@@ -51,9 +104,7 @@ async function fetchSheetData() {
             return;
         }
 
-        // Deep parsing for the nested JSON structure of 'spreadsheets.get'
         const sheetData = json.sheets?.[0]?.data?.[0]?.rowData;
-
         if (!sheetData || sheetData.length <= 1) {
             allData = [];
             applyFilters();
@@ -61,12 +112,10 @@ async function fetchSheetData() {
             return;
         }
 
-        // --- SMART COLUMN DETECTION ---
-        // Headers are in the first row's values
+        // SMART HEADER DETECTION
         const headerRow = sheetData[0].values || [];
         const headers = headerRow.map(cell => (cell.formattedValue || '').toLowerCase());
         
-        // Helper to find column index
         const getIdx = (keywords, defaultIdx) => {
             const idx = headers.findIndex(h => keywords.some(k => h.includes(k)));
             return idx > -1 ? idx : defaultIdx;
@@ -83,22 +132,31 @@ async function fetchSheetData() {
         const IDX_PRIORITY = getIdx(['priority'], 8);
         const IDX_DATE = getIdx(['date'], 9);
 
-        // --- MAPPING DATA ROWS ---
+        // DATA MAPPING
         const dataRows = sheetData.slice(1);
-
         allData = dataRows.map(row => {
             const cells = row.values || [];
-            
-            // Safe helper to get value and link
             const getVal = (idx) => cells[idx]?.formattedValue || "";
-            const getLink = (idx) => cells[idx]?.hyperlink || "";
+            // Robust Link Extraction: Check hyperlink -> then formula -> then text
+            const getLink = (idx) => {
+                if (cells[idx]?.hyperlink) return cells[idx].hyperlink;
+                // Sometimes smart chips store url in userEnteredValue formula
+                const formula = cells[idx]?.userEnteredValue?.formulaValue;
+                if (formula && formula.includes('HYPERLINK("')) {
+                    return formula.split('"')[1]; 
+                }
+                // Fallback: If text is URL
+                const txt = cells[idx]?.formattedValue || "";
+                if(txt.startsWith('http')) return txt;
+                return "";
+            };
 
             return {
                 id: getVal(IDX_ID),
                 module: getVal(IDX_MODULE) || "Other",
                 desc: getVal(IDX_DESC),
-                ref: getVal(IDX_REF),      // The text (e.g. "Error.png")
-                refUrl: getLink(IDX_REF),  // The hidden URL (e.g. "https://drive...")
+                ref: getVal(IDX_REF),      
+                refUrl: getLink(IDX_REF),  // Smart extraction
                 assign: getVal(IDX_ASSIGN) || "Unassigned",
                 dev: getVal(IDX_DEV),
                 qa: getVal(IDX_QA),
@@ -108,7 +166,6 @@ async function fetchSheetData() {
             };
         })
         .filter(item => item.id.trim() !== "")
-        // Sort: Latest ID First
         .sort((a, b) => b.id.localeCompare(a.id, undefined, { numeric: true }));
 
         applyFilters();
@@ -116,7 +173,7 @@ async function fetchSheetData() {
 
     } catch (error) {
         console.error("Fetch failure:", error);
-        alert("Failed to connect. Check internet or API Key.");
+        alert("Failed to connect.");
     } finally {
         document.getElementById('loader').style.display = 'none';
     }
@@ -130,7 +187,6 @@ function applyFilters() {
     const dateFrom = document.getElementById('filterDateFrom').value;
     const dateTo = document.getElementById('filterDateTo').value;
 
-    // 1. Base Filter (For Counts)
     const baseData = allData.filter(item => {
         const inSearch = (item.id.toLowerCase().includes(search) || 
                           item.desc.toLowerCase().includes(search) || 
@@ -153,10 +209,8 @@ function applyFilters() {
 
     updateCardCounts(baseData);
 
-    // 2. Tab Filter (For Table/Charts)
     const finalData = baseData.filter(item => {
         if (activeTab === 'All') return true;
-        
         const s = item.status.toLowerCase();
         if (activeTab === 'Pending') return s === 'pending';
         if (activeTab === 'Done') return s === 'done';
@@ -185,7 +239,6 @@ function updateCardCounts(data) {
 
 // --- RENDER TABLE & CHARTS ---
 function renderTableAndCharts(data) {
-    // Chart Data Prep
     const pCounts = { High: 0, Medium: 0, Low: 0 };
     const sCounts = { done: 0, pending: 0, other: 0 };
 
@@ -204,7 +257,6 @@ function renderTableAndCharts(data) {
 
     updateCharts(pCounts, sCounts);
 
-    // Table Render
     const tbody = document.getElementById('tableBody');
     tbody.innerHTML = '';
 
@@ -216,28 +268,14 @@ function renderTableAndCharts(data) {
             const tr = document.createElement('tr');
             tr.className = "bg-white border-b hover:bg-gray-50";
 
-            // Status Badge
-            let sClass = 'bg-gray-100 text-gray-800'; 
-            let sText = row.status.toLowerCase();
-            if(sText === 'done') sClass = 'bg-green-100 text-green-800';
-            else if(sText === 'pending') sClass = 'bg-yellow-100 text-yellow-800';
-            else sClass = 'bg-blue-100 text-blue-800';
+            let sClass = row.status.toLowerCase() === 'done' ? 'bg-green-100 text-green-800' : 
+                         row.status.toLowerCase() === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800';
 
-            // Priority Badge
-            let pClass = 'bg-gray-100 text-gray-800';
-            let pText = row.priority.toLowerCase();
-            if(pText.includes('high')) pClass = 'bg-red-100 text-red-800';
-            else if(pText.includes('low')) pClass = 'bg-green-100 text-green-800';
-            else pClass = 'bg-yellow-100 text-yellow-800';
+            let pClass = row.priority.toLowerCase().includes('high') ? 'bg-red-100 text-red-800' : 
+                         row.priority.toLowerCase().includes('low') ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
 
-            // --- REFERENCE LINK LOGIC ---
-            // If URL exists, make it a link. Else just text.
-            let refContent = row.ref;
-            if(row.refUrl) {
-                refContent = `<a href="${row.refUrl}" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1">
-                                <i class="fas fa-external-link-alt text-xs"></i> ${row.ref}
-                              </a>`;
-            }
+            // --- USE MEDIA RENDERER ---
+            const refContent = renderMediaContent(row.refUrl, row.ref);
 
             tr.innerHTML = `
                 <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">${row.id}</td>
@@ -256,7 +294,7 @@ function renderTableAndCharts(data) {
     }
 }
 
-// --- CHARTS CONFIG ---
+// --- CHARTS ---
 function updateCharts(pData, sData) {
     const ctxP = document.getElementById('priorityChart').getContext('2d');
     const ctxS = document.getElementById('statusChart').getContext('2d');
@@ -292,7 +330,6 @@ function updateCharts(pData, sData) {
     });
 }
 
-// --- EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
     fetchSheetData();
     document.getElementById('filterSearch').addEventListener('input', applyFilters);
