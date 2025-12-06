@@ -4,7 +4,7 @@ const SPREADSHEET_ID = '1rZJ7Tu-huQi_EVVSjjy7uhUumaxbM08WwsKjtjYJCn0';
 const SHEET_NAME = 'Website Issues'; 
 
 // *** IMPORTANT: PASTE YOUR APPS SCRIPT URL HERE AFTER DEPLOYMENT ***
-const APPS_SCRIPT_URL = 'YOUR_WEB_APP_URL_HERE'; 
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwy7kUdKpaSelf9yisq--UpY66baGW3ERy9id6DKK8qEyDPUFUAUrtOzBlBrD3Wyp2U/exec'; 
 
 let allData = [];
 let currentFilteredData = [];
