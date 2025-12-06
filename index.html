@@ -10,16 +10,22 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="p-6">
+<body class="p-6 relative">
 
     <header class="mb-8 flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
         <div>
             <h1 class="text-2xl font-bold text-gray-800 border-l-4 border-blue-600 pl-3">Talentwale Website Bugs Dashboard</h1>
             <p class="text-gray-500 text-sm pl-4 mt-1">Real-time Issue Tracking</p>
         </div>
-        <div class="text-right">
-            <span class="bg-blue-100 text-blue-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded">Live Data</span>
-            <div id="lastUpdated" class="text-gray-600 text-sm mt-1">Loading...</div>
+        <div class="flex items-center gap-4">
+            <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow flex items-center gap-2 transition-colors">
+                <i class="fas fa-plus"></i> Add New Issue
+            </button>
+            
+            <div class="text-right">
+                <span class="bg-blue-100 text-blue-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded">Live Data</span>
+                <div id="lastUpdated" class="text-gray-600 text-sm mt-1">Loading...</div>
+            </div>
         </div>
     </header>
 
@@ -56,12 +62,10 @@
     <div class="bg-white p-6 rounded-lg shadow-sm mb-6">
         <h3 class="text-lg font-semibold text-gray-700 mb-4"><i class="fas fa-filter mr-2"></i>Filters</h3>
         <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
-            
             <div class="md:col-span-1">
                 <label class="block text-sm text-gray-600 mb-1">Search</label>
                 <input type="text" id="filterSearch" placeholder="Search ID, Desc..." class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-sm">
             </div>
-
             <div>
                 <label class="block text-sm text-gray-600 mb-1">Module</label>
                 <select id="filterModule" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white text-sm">
@@ -72,14 +76,12 @@
                     <option value="Other">Other</option>
                 </select>
             </div>
-
             <div>
                 <label class="block text-sm text-gray-600 mb-1">Reported By</label>
                 <select id="filterReported" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white text-sm">
                     <option value="All">All Reporters</option>
                 </select>
             </div>
-
             <div>
                 <label class="block text-sm text-gray-600 mb-1">Priority</label>
                 <select id="filterPriority" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 bg-white text-sm">
@@ -89,12 +91,10 @@
                     <option value="Low">Low</option>
                 </select>
             </div>
-
             <div>
                 <label class="block text-sm text-gray-600 mb-1">From Date</label>
                 <input type="date" id="filterDateFrom" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-sm">
             </div>
-
             <div>
                 <label class="block text-sm text-gray-600 mb-1">To Date</label>
                 <input type="date" id="filterDateTo" class="w-full p-2 border rounded focus:outline-none focus:border-blue-500 text-sm">
@@ -114,11 +114,13 @@
                     <tr>
                         <th class="px-4 py-3">ID</th>
                         <th class="px-4 py-3">Module</th>
-                        <th class="px-4 py-3">Date</th> <th class="px-4 py-3 w-1/4">Description</th>
+                        <th class="px-4 py-3">Date</th>
+                        <th class="px-4 py-3 w-1/4">Description</th>
                         <th class="px-4 py-3">Reference</th>
                         <th class="px-4 py-3">Priority</th>
-                        <th class="px-4 py-3">Assign To</th> <th class="px-4 py-3">Status</th>
-                        </tr>
+                        <th class="px-4 py-3">Assign To</th>
+                        <th class="px-4 py-3">Status</th>
+                    </tr>
                 </thead>
                 <tbody id="tableBody">
                     </tbody>
@@ -150,6 +152,89 @@
 
         <div class="p-4 text-center text-gray-400 text-sm" id="noDataMessage" style="display: none;">
             No records found.
+        </div>
+    </div>
+
+    <div id="addIssueModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 m-4 transform transition-all">
+            <div class="flex justify-between items-center mb-6 border-b pb-2">
+                <h3 class="text-xl font-bold text-gray-800"><i class="fas fa-plus-circle text-blue-600 mr-2"></i>Add New Issue</h3>
+                <button onclick="closeAddModal()" class="text-gray-400 hover:text-red-500 transition-colors">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <form id="addIssueForm" onsubmit="submitIssue(event)" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Issue ID</label>
+                        <input type="text" id="inputId" class="w-full p-2 border rounded bg-gray-100 text-gray-500 cursor-not-allowed" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                        <input type="date" id="inputDate" class="w-full p-2 border rounded bg-gray-50 text-gray-700">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Module</label>
+                        <select id="inputModule" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" required>
+                            <option value="">Select Module</option>
+                            <option value="Admin">Admin</option>
+                            <option value="Employer">Employer</option>
+                            <option value="Candidate">Candidate</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                        <select id="inputPriority" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" required>
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Assign To</label>
+                    <select id="inputAssign" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" required>
+                        <option value="">Select Assignee</option>
+                        <option value="Visha">Visha</option>
+                        <option value="Parth">Parth</option>
+                        <option value="Sujay">Sujay</option>
+                        <option value="Dexit">Dexit</option>
+                        <option value="Darshan">Darshan</option>
+                        <option value="Preeti">Preeti</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea id="inputDesc" rows="3" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="Describe the bug..." required></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Reference</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="inputRefLink" class="flex-1 p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="Paste Link (Drive, Image, etc.)">
+                        <select id="inputRefType" class="w-32 p-2 border rounded bg-gray-50">
+                            <option value="Image">Snapshot</option>
+                            <option value="Video">Video</option>
+                            <option value="Link">Link</option>
+                        </select>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">*Select type to show correct icon in dashboard.</p>
+                </div>
+
+                <div class="pt-4 flex gap-3">
+                    <button type="button" onclick="closeAddModal()" class="flex-1 py-2 border rounded text-gray-600 hover:bg-gray-50">Cancel</button>
+                    <button type="submit" id="btnSubmit" class="flex-1 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 shadow-md flex justify-center items-center gap-2">
+                        <span id="submitText">Submit Issue</span>
+                        <i id="submitSpinner" class="fas fa-spinner fa-spin hidden"></i>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
