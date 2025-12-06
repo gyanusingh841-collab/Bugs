@@ -6,7 +6,7 @@ const SHEET_NAME = 'Website Issues';
 let allData = [];
 let currentFilteredData = [];
 let priorityChartInstance = null;
-let assignChartInstance = null; // Renamed from statusChart
+let assignChartInstance = null;
 let activeTab = 'All';
 
 // PAGINATION STATE
@@ -39,27 +39,24 @@ function renderMediaContent(url, text) {
     const cleanUrl = url.trim();
     const cleanText = text || "View File";
     
-    // Check for Google Drive Links
     if (cleanUrl.includes('drive.google.com') || cleanUrl.includes('docs.google.com')) {
         let icon = 'fa-google-drive';
         let colorClass = 'bg-gray-100 text-gray-700 border-gray-300';
-        
         const lowerText = cleanText.toLowerCase();
         
-        // VIDEO / IMAGE (Purple Style)
-        if (lowerText.includes('video') || lowerText.includes('.mp4') || lowerText.includes('.mov') ||
-            lowerText.includes('image') || lowerText.includes('img') || lowerText.includes('screenshot') || lowerText.includes('snapshot') || lowerText.includes('.png') || lowerText.includes('.jpg')) {
-            icon = lowerText.includes('video') ? 'fa-file-video text-purple-500' : 'fa-file-image text-purple-500';
+        if (lowerText.includes('video') || lowerText.includes('.mp4')) {
+            icon = 'fa-file-video text-purple-500';
             colorClass = 'bg-purple-50 text-purple-700 border-purple-200';
-        } 
-        else if (lowerText.includes('sheet') || lowerText.includes('xls')) {
+        } else if (lowerText.includes('image') || lowerText.includes('png') || lowerText.includes('jpg')) {
+            icon = 'fa-file-image text-purple-500';
+            colorClass = 'bg-purple-50 text-purple-700 border-purple-200';
+        } else if (lowerText.includes('sheet') || lowerText.includes('xls')) {
             icon = 'fa-file-excel text-green-600';
             colorClass = 'bg-green-50 text-green-700 border-green-200';
         }
 
         return `<a href="${cleanUrl}" target="_blank" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium hover:shadow-md transition-all ${colorClass}" title="${cleanText}">
-                    <i class="fab ${icon}"></i> 
-                    <span class="truncate max-w-[100px]">${cleanText}</span>
+                    <i class="fab ${icon}"></i> <span class="truncate max-w-[100px]">${cleanText}</span>
                 </a>`;
     }
 
@@ -68,144 +65,151 @@ function renderMediaContent(url, text) {
             </a>`;
 }
 
-// --- FETCH DATA ---
+// --- MAIN FETCH ---
 async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?includeGridData=true&ranges=${encodeURIComponent(SHEET_NAME)}&fields=sheets(data(rowData(values(hyperlink,formattedValue,userEnteredValue))))&key=${API_KEY}`;
-
     try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?includeGridData=true&ranges=${encodeURIComponent(SHEET_NAME)}&fields=sheets(data(rowData(values(hyperlink,formattedValue,userEnteredValue))))&key=${API_KEY}`;
+        
         const response = await fetch(url);
         const json = await response.json();
 
-        if (json.error) {
-            console.error("API Error:", json.error);
-            alert("Error: " + json.error.message);
-            document.getElementById('lastUpdated').innerText = 'Error';
-            return;
-        }
-
+        if (json.error) throw new Error(json.error.message);
         const sheetData = json.sheets?.[0]?.data?.[0]?.rowData;
-        if (!sheetData || sheetData.length <= 1) {
-            allData = [];
-            applyFilters();
-            document.getElementById('lastUpdated').innerText = 'No Data Found';
-            return;
-        }
+        if (!sheetData) throw new Error("No data");
 
-        // Header Detection
-        const headerRow = sheetData[0].values || [];
-        const headers = headerRow.map(cell => (cell.formattedValue || '').toLowerCase());
-        
-        const getIdx = (keywords, defaultIdx) => {
-            const idx = headers.findIndex(h => keywords.some(k => h.includes(k)));
-            return idx > -1 ? idx : defaultIdx;
-        };
-
-        const IDX_ID = getIdx(['id', 'issue'], 0);
-        const IDX_MODULE = getIdx(['module'], 1);
-        const IDX_DESC = getIdx(['description', 'desc'], 2);
-        const IDX_REF = getIdx(['reference', 'ref'], 3);
-        const IDX_ASSIGN = getIdx(['assign'], 4);
-        const IDX_DEV = getIdx(['dev'], 5);
-        const IDX_QA = getIdx(['qa', 'quality'], 6);
-        const IDX_STATUS = getIdx(['status', 'overall'], 7);
-        const IDX_PRIORITY = getIdx(['priority'], 8);
-        const IDX_DATE = getIdx(['date'], 9);
-        // NEW: Detect Reported By Column
-        const IDX_REPORTED = getIdx(['report', 'raised', 'founder'], 10); // Defaulting to col 10 if not found
-
-        // Map Data
-        const dataRows = sheetData.slice(1);
-        allData = dataRows.map(row => {
-            const cells = row.values || [];
-            const getVal = (idx) => cells[idx]?.formattedValue || "";
-            
-            const getLink = (idx) => {
-                const cell = cells[idx];
-                if (!cell) return "";
-                if (cell.hyperlink) return cell.hyperlink;
-                const formula = cell.userEnteredValue?.formulaValue;
-                if (formula && formula.includes('HYPERLINK("')) return formula.split('"')[1];
-                const txt = cell.formattedValue || "";
-                if(txt.startsWith('http')) return txt;
-                return "";
-            };
-
-            return {
-                id: getVal(IDX_ID),
-                module: getVal(IDX_MODULE) || "Other",
-                desc: getVal(IDX_DESC),
-                ref: getVal(IDX_REF),      
-                refUrl: getLink(IDX_REF),
-                assign: getVal(IDX_ASSIGN) || "Unassigned",
-                reported: getVal(IDX_REPORTED) || "-", // New Data Field
-                dev: getVal(IDX_DEV),
-                qa: getVal(IDX_QA),
-                status: (getVal(IDX_STATUS) || "Other").trim(),
-                priority: (getVal(IDX_PRIORITY) || "Low").trim(),
-                date: getVal(IDX_DATE)
-            };
-        })
-        .filter(item => item.id.trim() !== "")
-        .sort((a, b) => b.id.localeCompare(a.id, undefined, { numeric: true }));
-
-        // POPULATE REPORTED BY DROPDOWN
-        populateReportedFilter(allData);
-
-        applyFilters();
-        document.getElementById('lastUpdated').innerText = 'Updated: ' + new Date().toLocaleTimeString();
+        processData(sheetData);
 
     } catch (error) {
-        console.error("Fetch failure:", error);
-        alert("Failed to connect.");
+        console.warn("Advanced Fetch Failed, trying Simple...");
+        try {
+            const urlSimple = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}?key=${API_KEY}`;
+            const res = await fetch(urlSimple);
+            const json = await res.json();
+            if(!json.values) throw new Error("Empty Sheet");
+            processSimpleData(json.values);
+        } catch (e) {
+            alert("Failed to connect. Check API Key or Internet.");
+            document.getElementById('lastUpdated').innerText = 'Error';
+        }
     } finally {
         document.getElementById('loader').style.display = 'none';
     }
 }
 
-// --- POPULATE REPORTED FILTER ---
+function processData(rows) {
+    const headers = (rows[0].values || []).map(c => (c.formattedValue || '').toLowerCase());
+    const idx = getColumnIndices(headers);
+
+    allData = rows.slice(1).map(row => {
+        const cells = row.values || [];
+        const getVal = (i) => cells[i]?.formattedValue || "";
+        const getLink = (i) => {
+            const c = cells[i];
+            if (!c) return "";
+            if (c.hyperlink) return c.hyperlink;
+            const f = c.userEnteredValue?.formulaValue;
+            if (f && f.includes('HYPERLINK("')) return f.split('"')[1];
+            const t = c.formattedValue || "";
+            return t.startsWith('http') ? t : "";
+        };
+        return createRowObject(getVal, getLink, idx);
+    }).filter(d => d.id !== "");
+    finishLoad();
+}
+
+function processSimpleData(rows) {
+    const headers = rows[0].map(h => h.toLowerCase());
+    const idx = getColumnIndices(headers);
+    allData = rows.slice(1).map(cells => {
+        const getVal = (i) => cells[i] || "";
+        const getLink = (i) => cells[i]?.startsWith('http') ? cells[i] : "";
+        return createRowObject(getVal, getLink, idx);
+    }).filter(d => d.id !== "");
+    finishLoad();
+}
+
+function getColumnIndices(headers) {
+    const getIdx = (k, def) => {
+        const i = headers.findIndex(h => k.some(w => h.includes(w)));
+        return i > -1 ? i : def;
+    };
+    return {
+        id: getIdx(['id', 'issue'], 0),
+        module: getIdx(['module'], 1),
+        desc: getIdx(['description', 'desc'], 2),
+        ref: getIdx(['reference', 'ref'], 3),
+        assign: getIdx(['assign'], 4),
+        dev: getIdx(['dev'], 5),
+        qa: getIdx(['qa', 'quality'], 6),
+        status: getIdx(['status', 'overall'], 7),
+        priority: getIdx(['priority'], 8),
+        date: getIdx(['date'], 9),
+        reported: getIdx(['report', 'raised', 'founder'], 10)
+    };
+}
+
+function createRowObject(getVal, getLink, idx) {
+    return {
+        id: getVal(idx.id),
+        module: getVal(idx.module) || "Other",
+        desc: getVal(idx.desc),
+        ref: getVal(idx.ref),
+        refUrl: getLink(idx.ref),
+        assign: getVal(idx.assign) || "Unassigned",
+        reported: getVal(idx.reported) || "-",
+        dev: getVal(idx.dev),
+        qa: getVal(idx.qa),
+        status: (getVal(idx.status) || "Other").trim(),
+        priority: (getVal(idx.priority) || "Low").trim(),
+        date: getVal(idx.date)
+    };
+}
+
+function finishLoad() {
+    allData.sort((a, b) => b.id.localeCompare(a.id, undefined, { numeric: true }));
+    populateReportedFilter(allData);
+    applyFilters();
+    document.getElementById('lastUpdated').innerText = 'Updated: ' + new Date().toLocaleTimeString();
+}
+
 function populateReportedFilter(data) {
     const select = document.getElementById('filterReported');
+    if(!select) return;
     const reporters = [...new Set(data.map(item => item.reported))].sort();
-    
     select.innerHTML = '<option value="All">All Reporters</option>';
-    
     reporters.forEach(rep => {
         if(rep && rep !== '-') {
-            const option = document.createElement('option');
-            option.value = rep;
-            option.innerText = rep;
-            select.appendChild(option);
+            const opt = document.createElement('option');
+            opt.value = rep;
+            opt.innerText = rep;
+            select.appendChild(opt);
         }
     });
 }
 
-// --- FILTER LOGIC ---
+// --- FILTER & RENDER ---
 function applyFilters() {
     const search = document.getElementById('filterSearch').value.toLowerCase();
     const module = document.getElementById('filterModule').value;
-    const reported = document.getElementById('filterReported').value; // Changed from Assign
+    const reported = document.getElementById('filterReported')?.value || 'All';
     const priority = document.getElementById('filterPriority').value;
     const dateFrom = document.getElementById('filterDateFrom').value;
     const dateTo = document.getElementById('filterDateTo').value;
 
-    // 1. Base Filter (Global)
     const baseData = allData.filter(item => {
-        const inSearch = (item.id.toLowerCase().includes(search) || 
-                          item.desc.toLowerCase().includes(search) || 
-                          item.assign.toLowerCase().includes(search));
-        
+        const inSearch = (item.id.toLowerCase().includes(search) || item.desc.toLowerCase().includes(search));
         const inModule = module === 'All' || item.module === module;
-        const inReported = reported === 'All' || item.reported === reported; // Filter by Reported
+        const inReported = reported === 'All' || item.reported === reported;
         
         let itemP = item.priority.toLowerCase();
         let filterP = priority.toLowerCase();
         let inPriority = priority === 'All';
         if (filterP === 'medium' && (itemP.includes('medium') || itemP.includes('midium'))) inPriority = true;
         else if (filterP !== 'all' && itemP.includes(filterP)) inPriority = true;
-        
+
         let inDate = true;
         if (dateFrom && item.date < dateFrom) inDate = false;
         if (dateTo && item.date > dateTo) inDate = false;
@@ -215,7 +219,6 @@ function applyFilters() {
 
     updateCardCounts(baseData);
 
-    // 2. Tab Filter
     const finalData = baseData.filter(item => {
         if (activeTab === 'All') return true;
         const s = item.status.toLowerCase();
@@ -228,23 +231,34 @@ function applyFilters() {
     currentFilteredData = finalData;
     currentPage = 1;
     
-    updateCharts(baseData); 
+    // IMPORTANT: Now using 'finalData' to update charts so they respond to Tab clicks
+    updateCharts(finalData); 
     renderTablePage();
 }
 
-// --- PAGINATION RENDERER ---
+// --- UPDATE UI ---
+function updateCardCounts(data) {
+    const total = data.length;
+    const pending = data.filter(d => d.status.toLowerCase() === 'pending').length;
+    const done = data.filter(d => d.status.toLowerCase() === 'done').length;
+    const other = total - (pending + done);
+
+    document.getElementById('countTotal').innerText = total;
+    document.getElementById('countPending').innerText = pending;
+    document.getElementById('countDone').innerText = done;
+    document.getElementById('countOther').innerText = other;
+}
+
 function renderTablePage() {
     const totalRows = currentFilteredData.length;
     const startIndex = (currentPage - 1) * rowsPerPage;
     const endIndex = Math.min(startIndex + rowsPerPage, totalRows);
-    
     const pageData = currentFilteredData.slice(startIndex, endIndex);
 
     document.getElementById('startRow').innerText = totalRows === 0 ? 0 : startIndex + 1;
     document.getElementById('endRow').innerText = endIndex;
     document.getElementById('totalRows').innerText = totalRows;
     document.getElementById('pageIndicator').innerText = `Page ${currentPage}`;
-
     document.getElementById('btnPrev').disabled = currentPage === 1;
     document.getElementById('btnNext').disabled = endIndex >= totalRows;
 
@@ -270,76 +284,36 @@ function renderTablePage() {
 
             const refContent = renderMediaContent(row.refUrl, row.ref);
 
+            // UPDATED ORDER: ID, Module, Date, Desc, Ref, Priority, Assign, Status
             tr.innerHTML = `
                 <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">${row.id}</td>
                 <td class="px-4 py-3">${row.module}</td>
+                <td class="px-4 py-3 text-xs whitespace-nowrap text-gray-500">${row.date}</td>
                 <td class="px-4 py-3 truncate max-w-xs" title="${row.desc}">${row.desc}</td>
                 <td class="px-4 py-3">${refContent}</td>
                 <td class="px-4 py-3"><span class="${pClass} text-xs font-medium px-2 py-0.5 rounded">${row.priority}</span></td>
-                <td class="px-4 py-3 font-medium">${row.assign}</td>
-                <td class="px-4 py-3 text-blue-700 font-medium">${row.reported}</td> <td class="px-4 py-3 text-xs italic text-gray-500">${row.dev}</td>
-                <td class="px-4 py-3 text-xs italic text-gray-500">${row.qa}</td>
+                <td class="px-4 py-3 text-gray-700 font-medium">${row.assign}</td>
                 <td class="px-4 py-3"><span class="${sClass} text-xs font-medium px-2 py-0.5 rounded">${row.status}</span></td>
-                <td class="px-4 py-3 text-xs whitespace-nowrap">${row.date}</td>
             `;
             tbody.appendChild(tr);
         });
     }
 }
 
-// --- PAGINATION CONTROLS ---
-function changeRowsPerPage() {
-    rowsPerPage = parseInt(document.getElementById('rowsPerPage').value);
-    currentPage = 1;
-    renderTablePage();
-}
-
-function prevPage() {
-    if (currentPage > 1) {
-        currentPage--;
-        renderTablePage();
-    }
-}
-
-function nextPage() {
-    if ((currentPage * rowsPerPage) < currentFilteredData.length) {
-        currentPage++;
-        renderTablePage();
-    }
-}
-
-// --- UPDATE SUMMARY CARDS ---
-function updateCardCounts(data) {
-    const total = data.length;
-    const pending = data.filter(d => d.status.toLowerCase() === 'pending').length;
-    const done = data.filter(d => d.status.toLowerCase() === 'done').length;
-    const other = data.filter(d => {
-        const s = d.status.toLowerCase();
-        return s !== 'pending' && s !== 'done';
-    }).length;
-
-    document.getElementById('countTotal').innerText = total;
-    document.getElementById('countPending').innerText = pending;
-    document.getElementById('countDone').innerText = done;
-    document.getElementById('countOther').innerText = other;
-}
-
-// --- CHARTS (UPDATED: Added Assignee Chart) ---
+// --- CHARTS ---
 function updateCharts(data) {
     const pCounts = { High: 0, Medium: 0, Low: 0 };
-    const assignCounts = {}; // Store Assignee Data
+    const assignCounts = {}; 
 
     data.forEach(d => {
-        // Priority Stats
         let p = d.priority.toLowerCase();
         if(p.includes('high')) p = 'High';
         else if(p.includes('low')) p = 'Low';
         else p = 'Medium';
         if (pCounts[p] !== undefined) pCounts[p]++;
 
-        // Assignee Stats (Cleaning name)
-        let assignee = d.assign || "Unassigned";
-        if (assignee.trim() === "") assignee = "Unassigned";
+        let assignee = (d.assign || "Unassigned").trim();
+        if (!assignee) assignee = "Unassigned";
         assignCounts[assignee] = (assignCounts[assignee] || 0) + 1;
     });
 
@@ -349,7 +323,6 @@ function updateCharts(data) {
     if (priorityChartInstance) priorityChartInstance.destroy();
     if (assignChartInstance) assignChartInstance.destroy();
 
-    // 1. Priority Chart
     priorityChartInstance = new Chart(ctxP, {
         type: 'bar',
         data: {
@@ -364,15 +337,12 @@ function updateCharts(data) {
         options: { responsive: true, maintainAspectRatio: false }
     });
 
-    // 2. Assignee Chart (New)
     const assignLabels = Object.keys(assignCounts);
     const assignData = Object.values(assignCounts);
-    
-    // Generate random colors for bars
     const bgColors = assignLabels.map(() => `hsl(${Math.random() * 360}, 70%, 50%)`);
 
     assignChartInstance = new Chart(ctxA, {
-        type: 'bar', // Using Bar chart for better visibility of names
+        type: 'bar',
         data: {
             labels: assignLabels,
             datasets: [{
@@ -382,29 +352,23 @@ function updateCharts(data) {
                 borderWidth: 1
             }]
         },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false,
-            scales: {
-                y: { beginAtZero: true }
-            }
-        }
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
     });
 }
 
-// --- EVENTS ---
+function changeRowsPerPage() { rowsPerPage = parseInt(document.getElementById('rowsPerPage').value); currentPage = 1; renderTablePage(); }
+function prevPage() { if (currentPage > 1) { currentPage--; renderTablePage(); } }
+function nextPage() { if ((currentPage * rowsPerPage) < currentFilteredData.length) { currentPage++; renderTablePage(); } }
+
 document.addEventListener('DOMContentLoaded', () => {
     fetchSheetData();
-    
     document.getElementById('rowsPerPage').addEventListener('change', changeRowsPerPage);
     document.getElementById('btnPrev').addEventListener('click', prevPage);
     document.getElementById('btnNext').addEventListener('click', nextPage);
-
     document.getElementById('filterSearch').addEventListener('input', applyFilters);
     document.getElementById('filterModule').addEventListener('change', applyFilters);
-    document.getElementById('filterReported').addEventListener('change', applyFilters); // Changed from Assign
+    document.getElementById('filterReported').addEventListener('change', applyFilters);
     document.getElementById('filterPriority').addEventListener('change', applyFilters);
     document.getElementById('filterDateFrom').addEventListener('change', applyFilters);
     document.getElementById('filterDateTo').addEventListener('change', applyFilters);
 });
-        
