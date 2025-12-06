@@ -3,6 +3,9 @@ const API_KEY = 'AIzaSyA5X1MEweP0WvQbJ2uqG1NQON_fFyPm-lY';
 const SPREADSHEET_ID = '1rZJ7Tu-huQi_EVVSjjy7uhUumaxbM08WwsKjtjYJCn0'; 
 const SHEET_NAME = 'Website Issues'; 
 
+// *** IMPORTANT: PASTE YOUR APPS SCRIPT URL HERE AFTER DEPLOYMENT ***
+const APPS_SCRIPT_URL = 'YOUR_WEB_APP_URL_HERE'; 
+
 let allData = [];
 let currentFilteredData = [];
 let priorityChartInstance = null;
@@ -30,6 +33,101 @@ function setTab(tabName) {
     applyFilters();
 }
 
+// --- ADD ISSUE MODAL LOGIC ---
+function openAddModal() {
+    // 1. Calculate Next ID
+    let maxId = 0;
+    allData.forEach(d => {
+        // Extract number from TW-123
+        const match = d.id.match(/TW-(\d+)/);
+        if (match) {
+            const num = parseInt(match[1]);
+            if (num > maxId) maxId = num;
+        }
+    });
+    const nextId = 'TW-' + (maxId + 1);
+    
+    // 2. Set Default Values
+    document.getElementById('inputId').value = nextId;
+    document.getElementById('inputDate').valueAsDate = new Date();
+    document.getElementById('inputModule').value = "";
+    document.getElementById('inputPriority').value = "Low";
+    document.getElementById('inputAssign').value = "";
+    document.getElementById('inputDesc').value = "";
+    document.getElementById('inputRefLink').value = "";
+    
+    // 3. Show Modal
+    document.getElementById('addIssueModal').classList.remove('hidden');
+}
+
+function closeAddModal() {
+    document.getElementById('addIssueModal').classList.add('hidden');
+}
+
+async function submitIssue(e) {
+    e.preventDefault();
+    
+    const btn = document.getElementById('btnSubmit');
+    const spinner = document.getElementById('submitSpinner');
+    const text = document.getElementById('submitText');
+    
+    // Check if URL is configured
+    if (APPS_SCRIPT_URL.includes('YOUR_WEB_APP_URL')) {
+        alert("Please configure the Apps Script URL in script.js first!");
+        return;
+    }
+
+    // Loading State
+    btn.disabled = true;
+    text.innerText = "Saving...";
+    spinner.classList.remove('hidden');
+
+    // Prepare Data
+    const refLink = document.getElementById('inputRefLink').value;
+    const refType = document.getElementById('inputRefType').value;
+    let refFormula = "";
+    
+    if (refLink) {
+        const label = refType === 'Video' ? 'Video' : (refType === 'Image' ? 'Snapshot' : 'Link');
+        // Excel Formula for Hyperlink
+        refFormula = `=HYPERLINK("${refLink}", "${label}")`;
+    }
+
+    const payload = {
+        id: document.getElementById('inputId').value,
+        date: document.getElementById('inputDate').value,
+        module: document.getElementById('inputModule').value,
+        priority: document.getElementById('inputPriority').value,
+        assign: document.getElementById('inputAssign').value,
+        desc: document.getElementById('inputDesc').value,
+        ref: refFormula
+    };
+
+    try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await res.json();
+        
+        if (result.status === 'success') {
+            alert("Issue Added Successfully!");
+            closeAddModal();
+            fetchSheetData(); // Refresh Data
+        } else {
+            alert("Failed to save.");
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Error connecting to server.");
+    } finally {
+        btn.disabled = false;
+        text.innerText = "Submit Issue";
+        spinner.classList.add('hidden');
+    }
+}
+
 // --- HELPER: RENDER MEDIA ---
 function renderMediaContent(url, text) {
     if (!url) {
@@ -47,7 +145,7 @@ function renderMediaContent(url, text) {
         if (lowerText.includes('video') || lowerText.includes('.mp4')) {
             icon = 'fa-file-video text-purple-500';
             colorClass = 'bg-purple-50 text-purple-700 border-purple-200';
-        } else if (lowerText.includes('image') || lowerText.includes('png') || lowerText.includes('jpg')) {
+        } else if (lowerText.includes('snapshot') || lowerText.includes('image') || lowerText.includes('png') || lowerText.includes('jpg')) {
             icon = 'fa-file-image text-purple-500';
             colorClass = 'bg-purple-50 text-purple-700 border-purple-200';
         } else if (lowerText.includes('sheet') || lowerText.includes('xls')) {
@@ -65,14 +163,13 @@ function renderMediaContent(url, text) {
             </a>`;
 }
 
-// --- MAIN FETCH ---
+// --- FETCH DATA ---
 async function fetchSheetData() {
     document.getElementById('loader').style.display = 'block';
     document.getElementById('lastUpdated').innerText = 'Syncing...';
     
     try {
         const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?includeGridData=true&ranges=${encodeURIComponent(SHEET_NAME)}&fields=sheets(data(rowData(values(hyperlink,formattedValue,userEnteredValue))))&key=${API_KEY}`;
-        
         const response = await fetch(url);
         const json = await response.json();
 
@@ -81,7 +178,6 @@ async function fetchSheetData() {
         if (!sheetData) throw new Error("No data");
 
         processData(sheetData);
-
     } catch (error) {
         console.warn("Advanced Fetch Failed, trying Simple...");
         try {
@@ -91,7 +187,7 @@ async function fetchSheetData() {
             if(!json.values) throw new Error("Empty Sheet");
             processSimpleData(json.values);
         } catch (e) {
-            alert("Failed to connect. Check API Key or Internet.");
+            alert("Failed to connect.");
             document.getElementById('lastUpdated').innerText = 'Error';
         }
     } finally {
@@ -102,7 +198,6 @@ async function fetchSheetData() {
 function processData(rows) {
     const headers = (rows[0].values || []).map(c => (c.formattedValue || '').toLowerCase());
     const idx = getColumnIndices(headers);
-
     allData = rows.slice(1).map(row => {
         const cells = row.values || [];
         const getVal = (i) => cells[i]?.formattedValue || "";
@@ -142,8 +237,6 @@ function getColumnIndices(headers) {
         desc: getIdx(['description', 'desc'], 2),
         ref: getIdx(['reference', 'ref'], 3),
         assign: getIdx(['assign'], 4),
-        dev: getIdx(['dev'], 5),
-        qa: getIdx(['qa', 'quality'], 6),
         status: getIdx(['status', 'overall'], 7),
         priority: getIdx(['priority'], 8),
         date: getIdx(['date'], 9),
@@ -160,8 +253,6 @@ function createRowObject(getVal, getLink, idx) {
         refUrl: getLink(idx.ref),
         assign: getVal(idx.assign) || "Unassigned",
         reported: getVal(idx.reported) || "-",
-        dev: getVal(idx.dev),
-        qa: getVal(idx.qa),
         status: (getVal(idx.status) || "Other").trim(),
         priority: (getVal(idx.priority) || "Low").trim(),
         date: getVal(idx.date)
@@ -190,7 +281,6 @@ function populateReportedFilter(data) {
     });
 }
 
-// --- FILTER & RENDER ---
 function applyFilters() {
     const search = document.getElementById('filterSearch').value.toLowerCase();
     const module = document.getElementById('filterModule').value;
@@ -231,12 +321,10 @@ function applyFilters() {
     currentFilteredData = finalData;
     currentPage = 1;
     
-    // IMPORTANT: Now using 'finalData' to update charts so they respond to Tab clicks
     updateCharts(finalData); 
     renderTablePage();
 }
 
-// --- UPDATE UI ---
 function updateCardCounts(data) {
     const total = data.length;
     const pending = data.filter(d => d.status.toLowerCase() === 'pending').length;
@@ -284,7 +372,7 @@ function renderTablePage() {
 
             const refContent = renderMediaContent(row.refUrl, row.ref);
 
-            // UPDATED ORDER: ID, Module, Date, Desc, Ref, Priority, Assign, Status
+            // UPDATED ORDER
             tr.innerHTML = `
                 <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">${row.id}</td>
                 <td class="px-4 py-3">${row.module}</td>
@@ -300,7 +388,6 @@ function renderTablePage() {
     }
 }
 
-// --- CHARTS ---
 function updateCharts(data) {
     const pCounts = { High: 0, Medium: 0, Low: 0 };
     const assignCounts = {}; 
@@ -372,3 +459,4 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filterDateFrom').addEventListener('change', applyFilters);
     document.getElementById('filterDateTo').addEventListener('change', applyFilters);
 });
+            
